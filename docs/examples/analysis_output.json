@@ -1,0 +1,308 @@
+{
+  "article_id": "news_samsung_001",
+  "news_type": "주가 급등락 뉴스",
+  "primary_issue_id": "issue_001",
+  "summary": "오픈AI 실적 우려로 AI 반도체 투자심리가 흔들리며 삼성전자와 SK하이닉스는 프리마켓(-2%대)과 장 초반(-1%대) 약세를 보였지만, 시장이 이를 AI 산업 전체의 문제보다 오픈AI 개별 이슈로 해석하면서 장중 반등했다. 현재 삼성전자는 2.59%, SK하이닉스는 0.15%, SK스퀘어는 2.71%(2만 2000원) 상승 중이다. WSJ의 오픈AI 신규 사용자수·매출 목표 미달 보도와 막대한 AI 투자 비용 부담, 사라 프라이어 오픈AI CFO의 데이터센터 비용 지급 우려 발언이 약세 배경으로 제시됐지만, 허재환 유진투자증권 연구원은 이를 AI 생태계 성장 자체를 흔들 이슈로 보지 않았고 4월 미국 반도체주 40% 급등 뒤 나타난 일시적 조정으로 해석했다. KB증권도 AI 추론·에이전트 확산으로 CPU, 서버 D램, LPDDR5X, 낸드플래시 등 메모리 전반의 중요성이 커질 것으로 보며 삼성전자 가치 재평가 가능성을 제시했다.",
+  "issue_candidates": [
+    {
+      "issue_id": "issue_001",
+      "issue": "29일 삼성전자와 SK하이닉스는 오픈AI 우려에도 프리마켓(-2%대)과 장 초반(-1%대) 약세를 딛고 장중 반등했다.",
+      "issue_layer": "주요 이슈",
+      "issue_type": "시장반응",
+      "related_entities": [
+        "삼성전자",
+        "SK하이닉스",
+        "오픈AI",
+        "반도체",
+        "AI"
+      ],
+      "supporting_sentences": [
+        "삼성전자(005930)와 SK하이닉스(000660)가 하락 출발했지만 장 중 상승세로 전환했다.",
+        "시장에서는 오픈AI의 실적은 그 자체의 문제로 끝날 것으로바고 AI 전환이 지속될 것이란 전망에 힘이 실리면서 삼성전자와 SK하이닉스가 반등에 성공한 것으로 풀이된다.",
+        "삼성전자와 SK하이닉스는 이날 장 초반 1%가까이 하락했는데 장 중 낙폭을 회복한 것에 더해 상승 전환했다.",
+        "앞선 프리마켓(오전 8시~8시 50분)에서는 2% 가까이 약세를 보이기도 했다."
+      ],
+      "centrality_score": 5,
+      "market_relevance_score": 5,
+      "support_strength_score": 5,
+      "forward_value_score": 5,
+      "entity_focus_score": 5,
+      "is_primary": true
+    },
+    {
+      "issue_id": "issue_002",
+      "issue": "오픈AI의 실적이 목표치보다 미치지 못할 것이란 전망, WSJ의 신규 사용자수·매출 목표 미달, 막대한 AI 투자 비용 부담 우려, 사라 프라이어 오픈AI CFO의 AI 데이터센터 비용 지급 우려 발언이 뉴욕 증시 반도체 종목 약세의 배경으로 제시됐다.",
+      "issue_layer": "직접 촉발 이슈",
+      "issue_type": "원인",
+      "related_entities": [
+        "삼성전자",
+        "SK하이닉스",
+        "오픈AI",
+        "반도체",
+        "AI 데이터센터",
+        "AI",
+        "CFO"
+      ],
+      "supporting_sentences": [
+        "이날 증권가에서는 오픈AI 실적 우려로 삼성전자와 SK하이닉스가 약세를 보일 것이란 관측이 지배적이었다.",
+        "오픈AI의 실적이 목표치보다 미치지 못할 것이란 전망이 나왔고, 이에 따라 뉴욕 증시에서 반도체 종목 전반이 약세였기 때문이다.",
+        "앞서 WSJ은 오픈AI가 신규 사용자수와 매출 목표치를 달성하지 못했고 막대한 AI 투자 비용을 감당할 수 있을지에 대해 내부에서 우려가 일고 있다고 보도했다.",
+        "특히 외신에 따르면 사라 프라이어 오픈AI 최고재무책임자(CFO)가 최근 회사의 다른 임원들에게 매출이 충분히 빨리 성장하지 못하면 향후 AI 데이터센터 비용을 지급하지 못할 수 있다는 우려를 표한 것으로 전해졌다."
+      ],
+      "centrality_score": 4,
+      "market_relevance_score": 5,
+      "support_strength_score": 5,
+      "forward_value_score": 4,
+      "entity_focus_score": 4,
+      "is_primary": false
+    },
+    {
+      "issue_id": "issue_003",
+      "issue": "허재환 유진투자증권 연구원은 오픈AI 이슈를 AI 산업 전체의 문제가 아니라 오픈AI 개별 이슈이자 일시적 조정으로 해석했다.",
+      "issue_layer": "시장 해석 이슈",
+      "issue_type": "해석",
+      "related_entities": [
+        "오픈AI",
+        "반도체",
+        "AI"
+      ],
+      "supporting_sentences": [
+        "그럼에도 불구하고 전문가들은 오픈AI의 문제가 시장 전반으로 확산될 가능성은 낮다고 진단했다.",
+        "허재환 유진투자증권 연구원은 “이는 오픈AI의 문제이지 AI 생태계의 성장을 의심할 정도는 아니다”라고 설명했다.",
+        "그러면서 뉴욕 증시에 대해 일시적 조정이라고 선을 그었다.",
+        "그는 “(뉴욕 증시의 약세는) 4월 들어서 미국 반도체주들이 40% 급등했고 신발 회사인 올버즈가 뜬금없이 AI에 진출하겠다고 나설 정도로 광풍의 징후가 있었기 때문”이라고 했다."
+      ],
+      "centrality_score": 4,
+      "market_relevance_score": 4,
+      "support_strength_score": 5,
+      "forward_value_score": 5,
+      "entity_focus_score": 3,
+      "is_primary": false
+    },
+    {
+      "issue_id": "issue_004",
+      "issue": "AI 추론·에이전트 확산으로 HBM 외 메모리 전반 수요 기대가 유지되며 삼성전자 가치 재평가 논리가 이어진다.",
+      "issue_layer": "중장기 전망 이슈",
+      "issue_type": "전망",
+      "related_entities": [
+        "삼성전자",
+        "메모리",
+        "GPU",
+        "HBM",
+        "CPU",
+        "서버 D램",
+        "LPDDR5X",
+        "낸드플래시",
+        "AI"
+      ],
+      "supporting_sentences": [
+        "KB증권은 이날 삼성전자에 대해 “AI 시대에 가장 중요한 자원인 메모리의 생산 능력을 확보한 삼성전자의 가치가 재평가될 것”이라고 짚었다.",
+        "김동원 KB증권 리서치본부장은 “기존 AI 학습 단계에서는 대용량 데이터를 한번에 처리하기 위해 그래픽처리장치(GPU)와 고대역폭메모리(HBM) 조합이 핵심이었다”며 “그러나 AI 추론과 AI 에이전트 시대에는 방대한 정보와 데이터를 순차적으로 처리해야 하기 때문에 중앙처리장치(CPU)와 서버 D램, LPDDR5X, 낸드플래시 조합의 중요성이 빠르게 확대될 전망”이라고 말했다."
+      ],
+      "centrality_score": 3,
+      "market_relevance_score": 4,
+      "support_strength_score": 4,
+      "forward_value_score": 5,
+      "entity_focus_score": 4,
+      "is_primary": false
+    }
+  ],
+  "secondary_issue_ids": [
+    "issue_002",
+    "issue_003",
+    "issue_004"
+  ],
+  "summary_points": [
+    {
+      "point_id": "point_001",
+      "linked_issue_id": "issue_001",
+      "point": "29일 삼성전자와 SK하이닉스는 오픈AI 우려에도 프리마켓(-2%대)과 장 초반(-1%대) 약세를 딛고 장중 반등했다.",
+      "point_type": "시장반응",
+      "summary_role": "핵심 현상",
+      "issue_layer": "주요 이슈",
+      "key_numbers": [
+        {
+          "label": "프리마켓 약세",
+          "value": "-2%대",
+          "entity": "삼성전자와 SK하이닉스",
+          "time_context": "프리마켓"
+        },
+        {
+          "label": "장 초반 약세",
+          "value": "-1%대",
+          "entity": "삼성전자와 SK하이닉스",
+          "time_context": "장 초반"
+        }
+      ],
+      "related_entity": [
+        "삼성전자",
+        "SK하이닉스",
+        "오픈AI",
+        "AI"
+      ],
+      "evidence_sentence": "삼성전자(005930)와 SK하이닉스(000660)가 하락 출발했지만 장 중 상승세로 전환했다.",
+      "evidence_sentences": [
+        "삼성전자(005930)와 SK하이닉스(000660)가 하락 출발했지만 장 중 상승세로 전환했다.",
+        "시장에서는 오픈AI의 실적은 그 자체의 문제로 끝날 것으로바고 AI 전환이 지속될 것이란 전망에 힘이 실리면서 삼성전자와 SK하이닉스가 반등에 성공한 것으로 풀이된다.",
+        "삼성전자와 SK하이닉스는 이날 장 초반 1%가까이 하락했는데 장 중 낙폭을 회복한 것에 더해 상승 전환했다.",
+        "앞선 프리마켓(오전 8시~8시 50분)에서는 2% 가까이 약세를 보이기도 했다."
+      ],
+      "is_source_grounded": true
+    },
+    {
+      "point_id": "point_002",
+      "linked_issue_id": "issue_001",
+      "point": "현재 삼성전자는 2.59%, SK하이닉스는 0.15%, SK스퀘어는 2.71%(2만 2000원) 상승 중이다.",
+      "point_type": "핵심수치",
+      "summary_role": "시장 반응 수치",
+      "issue_layer": "주요 이슈",
+      "key_numbers": [
+        {
+          "label": "삼성전자 상승률",
+          "value": "2.59%",
+          "entity": "삼성전자",
+          "time_context": "장중"
+        },
+        {
+          "label": "SK하이닉스 상승률",
+          "value": "0.15%",
+          "entity": "SK하이닉스",
+          "time_context": "장중"
+        },
+        {
+          "label": "SK스퀘어 상승률",
+          "value": "2.71%(2만 2000원)",
+          "entity": "SK스퀘어",
+          "time_context": "장중"
+        }
+      ],
+      "related_entity": [
+        "삼성전자",
+        "SK하이닉스",
+        "SK스퀘어"
+      ],
+      "evidence_sentence": "29일 한국거래소에 따르면 삼성전자와 SK하이닉스의 주가는 전 거래일 대비 각각 2.59%, 0.15% 오르고 있다.",
+      "evidence_sentences": [
+        "29일 한국거래소에 따르면 삼성전자와 SK하이닉스의 주가는 전 거래일 대비 각각 2.59%, 0.15% 오르고 있다.",
+        "SK스퀘어도 상승 전환하면서 전날 대비 2만 2000원(2.71%) 상승 중이다."
+      ],
+      "is_source_grounded": true
+    },
+    {
+      "point_id": "point_003",
+      "linked_issue_id": "issue_002",
+      "point": "오픈AI의 실적이 목표치보다 미치지 못할 것이란 전망, WSJ의 신규 사용자수·매출 목표 미달, 막대한 AI 투자 비용 부담 우려, 사라 프라이어 오픈AI CFO의 AI 데이터센터 비용 지급 우려 발언이 뉴욕 증시 반도체 종목 약세의 배경으로 제시됐다.",
+      "point_type": "원인",
+      "summary_role": "하락 원인",
+      "issue_layer": "직접 촉발 이슈",
+      "key_numbers": [],
+      "related_entity": [
+        "삼성전자",
+        "SK하이닉스",
+        "오픈AI",
+        "반도체",
+        "AI 데이터센터",
+        "AI",
+        "CFO"
+      ],
+      "evidence_sentence": "이날 증권가에서는 오픈AI 실적 우려로 삼성전자와 SK하이닉스가 약세를 보일 것이란 관측이 지배적이었다.",
+      "evidence_sentences": [
+        "이날 증권가에서는 오픈AI 실적 우려로 삼성전자와 SK하이닉스가 약세를 보일 것이란 관측이 지배적이었다.",
+        "오픈AI의 실적이 목표치보다 미치지 못할 것이란 전망이 나왔고, 이에 따라 뉴욕 증시에서 반도체 종목 전반이 약세였기 때문이다.",
+        "앞서 WSJ은 오픈AI가 신규 사용자수와 매출 목표치를 달성하지 못했고 막대한 AI 투자 비용을 감당할 수 있을지에 대해 내부에서 우려가 일고 있다고 보도했다.",
+        "특히 외신에 따르면 사라 프라이어 오픈AI 최고재무책임자(CFO)가 최근 회사의 다른 임원들에게 매출이 충분히 빨리 성장하지 못하면 향후 AI 데이터센터 비용을 지급하지 못할 수 있다는 우려를 표한 것으로 전해졌다."
+      ],
+      "is_source_grounded": true
+    },
+    {
+      "point_id": "point_004",
+      "linked_issue_id": "issue_003",
+      "point": "허재환 유진투자증권 연구원은 이를 AI 산업 전체의 문제보다 오픈AI 개별 이슈로 봤다.",
+      "point_type": "리스크완화",
+      "summary_role": "우려 완화 근거",
+      "issue_layer": "시장 해석 이슈",
+      "key_numbers": [],
+      "related_entity": [
+        "오픈AI",
+        "반도체",
+        "AI"
+      ],
+      "evidence_sentence": "그럼에도 불구하고 전문가들은 오픈AI의 문제가 시장 전반으로 확산될 가능성은 낮다고 진단했다.",
+      "evidence_sentences": [
+        "그럼에도 불구하고 전문가들은 오픈AI의 문제가 시장 전반으로 확산될 가능성은 낮다고 진단했다.",
+        "허재환 유진투자증권 연구원은 “이는 오픈AI의 문제이지 AI 생태계의 성장을 의심할 정도는 아니다”라고 설명했다."
+      ],
+      "is_source_grounded": true
+    },
+    {
+      "point_id": "point_005",
+      "linked_issue_id": "issue_003",
+      "point": "그는 뉴욕 증시 약세를 4월 미국 반도체주 40% 급등과 올버즈의 AI 진출 선언까지 나올 정도의 광풍 징후 뒤에 나온 일시적 조정으로 해석했다.",
+      "point_type": "리스크완화",
+      "summary_role": "시장 해석",
+      "issue_layer": "시장 해석 이슈",
+      "key_numbers": [
+        {
+          "label": "미국 반도체주 급등",
+          "value": "40%",
+          "entity": "미국 반도체주",
+          "time_context": "4월"
+        }
+      ],
+      "related_entity": [
+        "오픈AI",
+        "반도체",
+        "AI"
+      ],
+      "evidence_sentence": "허재환 유진투자증권 연구원은 “이는 오픈AI의 문제이지 AI 생태계의 성장을 의심할 정도는 아니다”라고 설명했다.",
+      "evidence_sentences": [
+        "그럼에도 불구하고 전문가들은 오픈AI의 문제가 시장 전반으로 확산될 가능성은 낮다고 진단했다.",
+        "허재환 유진투자증권 연구원은 “이는 오픈AI의 문제이지 AI 생태계의 성장을 의심할 정도는 아니다”라고 설명했다.",
+        "그러면서 뉴욕 증시에 대해 일시적 조정이라고 선을 그었다.",
+        "그는 “(뉴욕 증시의 약세는) 4월 들어서 미국 반도체주들이 40% 급등했고 신발 회사인 올버즈가 뜬금없이 AI에 진출하겠다고 나설 정도로 광풍의 징후가 있었기 때문”이라고 했다."
+      ],
+      "is_source_grounded": true
+    },
+    {
+      "point_id": "point_006",
+      "linked_issue_id": "issue_004",
+      "point": "KB증권은 메모리 생산 능력을 확보한 삼성전자의 가치가 재평가될 수 있다고 봤고, 김동원 리서치본부장은 AI 학습 단계의 GPU·HBM 조합을 넘어 AI 추론·에이전트 시대에는 CPU, 서버 D램, LPDDR5X, 낸드플래시 조합의 중요성이 빠르게 확대될 것이라고 말했다.",
+      "point_type": "전망",
+      "summary_role": "중장기 전망",
+      "issue_layer": "중장기 전망 이슈",
+      "key_numbers": [],
+      "related_entity": [
+        "삼성전자",
+        "메모리",
+        "GPU",
+        "HBM",
+        "CPU",
+        "서버 D램",
+        "LPDDR5X",
+        "낸드플래시",
+        "AI"
+      ],
+      "evidence_sentence": "KB증권은 이날 삼성전자에 대해 “AI 시대에 가장 중요한 자원인 메모리의 생산 능력을 확보한 삼성전자의 가치가 재평가될 것”이라고 짚었다.",
+      "evidence_sentences": [
+        "KB증권은 이날 삼성전자에 대해 “AI 시대에 가장 중요한 자원인 메모리의 생산 능력을 확보한 삼성전자의 가치가 재평가될 것”이라고 짚었다.",
+        "김동원 KB증권 리서치본부장은 “기존 AI 학습 단계에서는 대용량 데이터를 한번에 처리하기 위해 그래픽처리장치(GPU)와 고대역폭메모리(HBM) 조합이 핵심이었다”며 “그러나 AI 추론과 AI 에이전트 시대에는 방대한 정보와 데이터를 순차적으로 처리해야 하기 때문에 중앙처리장치(CPU)와 서버 D램, LPDDR5X, 낸드플래시 조합의 중요성이 빠르게 확대될 전망”이라고 말했다."
+      ],
+      "is_source_grounded": true
+    }
+  ],
+  "coverage_check": {
+    "primary_issue_checked": true,
+    "market_reaction_checked": true,
+    "cause_checked": true,
+    "risk_checked": true,
+    "market_interpretation_checked": true,
+    "growth_or_outlook_checked": true,
+    "outlook_checked": true,
+    "key_numbers_checked": true
+  },
+  "debug": {
+    "llm_backend": "MockSummaryPointExtractor",
+    "summary_hint_count": 2,
+    "metadata_hints_count": 14
+  }
+}
