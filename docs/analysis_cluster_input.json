@@ -1,0 +1,29 @@
+{
+  "as_of": "2026-05-04",
+  "clusters": [
+    {
+      "cluster": {
+        "id": "01KQRBC9N3E4Y5Z6X7W8V9T0S1",
+        "cluster_id": 2,
+        "representative_news_id": "01KQRB77Z0CXE0D7P8KKDP4RWA",
+        "sector": ["반도체", "금융·증권·보험"],
+        "keyword": ["코스피 사상 최고치", "삼성전자 1분기 호실적"]
+      },
+      "news": [
+        {
+          "id": "01KQRB77Z0CXE0D7P8KKDP4RWA",
+          "title": "코스피, 사상 최고치 찍고 6700선 아래로…찰나의 23만전자",
+          "content": "코스피 지수가 사상 최고치를 찍고 하락 전환해 6700선 아래로 내려앉았다. 삼성전자와 SK하이닉스가 장 초반 강세를 보였으나 차익실현 매물과 유가 상승 우려로 변동성이 커졌다.",
+          "companies": ["삼성전자", "SK하이닉스"],
+          "sectors": ["반도체", "금융·증권·보험"],
+          "keywords": ["코스피 사상 최고치", "유가 급등"],
+          "article_role": "representative"
+        }
+      ],
+      "company": [
+        {"name": "삼성전자"},
+        {"name": "SK하이닉스"}
+      ]
+    }
+  ]
+}

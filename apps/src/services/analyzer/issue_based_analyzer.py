@@ -191,6 +191,68 @@ class IssueBasedAnalyzerService:
             return result.model_copy(update={"debug": debug})
 
     def _analyze_with_gemini(self, article: AnalysisRequest) -> AnalysisResponse:
+        if cofig.USE_LANGCHAIN:
+            try:
+                return self._analyze_with_langchain(article)
+            except Exception as exc:
+                result = self._analyze_with_gemini_client(article)
+                debug = dict(result.debug)
+                debug["langchain_error"] = str(exc)
+                return result.model_copy(update={"debug": debug})
+
+        return self._analyze_with_gemini_client(article)
+
+    def _analyze_with_langchain(self, article: AnalysisRequest) -> AnalysisResponse:
+        llm, backend = self._build_langchain_model()
+        structured_llm = llm.with_structured_output(AnalysisResponse)
+        result = structured_llm.invoke(self._build_prompt(article))
+        if not isinstance(result, AnalysisResponse):
+            result = AnalysisResponse.model_validate(result)
+
+        debug = dict(result.debug)
+        debug.update(
+            {
+                "analyzer": self.__class__.__name__,
+                "backend": backend,
+                "summary_hint_count": len(article.summary_hint),
+                "metadata_hint_count": len(article.metadata.company_names)
+                + len(article.metadata.sectors)
+                + len(article.metadata.keywords),
+            }
+        )
+        return result.model_copy(update={"debug": debug})
+
+    def _build_langchain_model(self) -> tuple[object, str]:
+        if cofig.GEMINI_USE_VERTEX:
+            if not cofig.GOOGLE_CLOUD_PROJECT:
+                raise RuntimeError("GOOGLE_CLOUD_PROJECT 환경변수가 필요합니다.")
+            from langchain_google_vertexai import ChatVertexAI
+
+            return (
+                ChatVertexAI(
+                    model_name=cofig.VERTEX_MODEL,
+                    project=cofig.GOOGLE_CLOUD_PROJECT,
+                    location=cofig.GOOGLE_CLOUD_LOCATION,
+                    temperature=0,
+                ),
+                "langchain-vertex",
+            )
+
+        if not cofig.GEMINI_API_KEY:
+            raise RuntimeError("GEMINI_API_KEY 환경변수가 필요합니다.")
+
+        from langchain_google_genai import ChatGoogleGenerativeAI
+
+        return (
+            ChatGoogleGenerativeAI(
+                model=cofig.GEMINI_MODEL,
+                google_api_key=cofig.GEMINI_API_KEY,
+                temperature=0,
+            ),
+            "langchain-gemini-api",
+        )
+
+    def _analyze_with_gemini_client(self, article: AnalysisRequest) -> AnalysisResponse:
         try:
             from google import genai
         except ImportError as exc:

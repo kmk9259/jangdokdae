@@ -20,8 +20,10 @@ class AnalyzerService:
         return self.analyze(request)
 
     def analyze_many(self, payload: dict[str, Any] | list[dict[str, Any]]) -> list[AnalysisResponse]:
-        requests = self.to_analysis_requests(payload)
-        return [self.analyze(request) for request in requests]
+        from apps.src.services.analyzer.workflow import ClusterAnalysisWorkflow
+
+        workflow = ClusterAnalysisWorkflow(self)
+        return workflow.run(payload)
 
     def to_analysis_requests(self, payload: dict[str, Any] | list[dict[str, Any]]) -> list[AnalysisRequest]:
         if isinstance(payload, list):
@@ -76,33 +78,122 @@ class AnalyzerService:
             ),
         )
 
-    def _cluster_to_request(self, cluster: dict[str, Any]) -> AnalysisRequest:
-        representative = cluster.get("representative_article") or {}
-        cluster_company_context = cluster.get("company") or []
-        company_names = self._coerce_list(representative.get("company"))
-        if not company_names and isinstance(cluster_company_context, list):
-            company_names = [
-                item.get("company_name")
-                for item in cluster_company_context
-                if isinstance(item, dict) and item.get("company_name")
-            ]
+    def _cluster_to_request(
+        self,
+        cluster: dict[str, Any],
+        representative: dict[str, Any] | None = None,
+    ) -> AnalysisRequest:
+        representative = representative or self._select_representative_article(cluster)
+        cluster_meta = cluster.get("cluster") if isinstance(cluster.get("cluster"), dict) else {}
+        summary_hint = self._build_cluster_summary_hints(cluster, representative)
 
         return AnalysisRequest(
             article_id=self._coerce_id(
                 representative.get("article_id"),
                 representative.get("news_id"),
+                representative.get("id"),
                 representative.get("article_idx"),
+                cluster_meta.get("id"),
+                cluster_meta.get("cluster_id"),
                 cluster.get("cluster_id"),
             ),
             title=representative.get("title") or representative.get("news_title"),
-            summary_hint=self._coerce_list(cluster.get("summary_hint")),
+            summary_hint=summary_hint,
             content=representative.get("content") or representative.get("news_content") or "",
             metadata=ArticleMetadata(
-                company_names=self._coerce_list(company_names),
-                sectors=self._coerce_list(cluster.get("sectors") or cluster.get("sector")),
-                keywords=self._coerce_list(cluster.get("keywords") or cluster.get("keyword")),
+                company_names=self._extract_company_names(cluster, representative),
+                sectors=self._coerce_list(
+                    cluster.get("sectors")
+                    or cluster.get("sector")
+                    or cluster_meta.get("sectors")
+                    or cluster_meta.get("sector")
+                    or representative.get("sectors")
+                    or representative.get("sector")
+                ),
+                keywords=self._coerce_list(
+                    cluster.get("keywords")
+                    or cluster.get("keyword")
+                    or cluster_meta.get("keywords")
+                    or cluster_meta.get("keyword")
+                    or representative.get("keywords")
+                    or representative.get("keyword")
+                ),
             ),
         )
+
+    def _select_representative_article(self, cluster: dict[str, Any]) -> dict[str, Any]:
+        representative = cluster.get("representative_article")
+        if isinstance(representative, dict) and representative:
+            return representative
+
+        news_items = cluster.get("news")
+        if not isinstance(news_items, list) or not news_items:
+            return {}
+
+        cluster_meta = cluster.get("cluster") if isinstance(cluster.get("cluster"), dict) else {}
+        target_id = (
+            cluster.get("representative_news_id")
+            or cluster_meta.get("representative_news_id")
+            or cluster.get("news_id")
+        )
+
+        if target_id:
+            for item in news_items:
+                if not isinstance(item, dict):
+                    continue
+                if str(item.get("id") or item.get("news_id") or item.get("article_id") or "").strip() == str(target_id):
+                    return item
+
+        for item in news_items:
+            if isinstance(item, dict) and item.get("article_role") == "representative":
+                return item
+
+        return next((item for item in news_items if isinstance(item, dict)), {})
+
+    def _extract_company_names(self, cluster: dict[str, Any], representative: dict[str, Any]) -> list[str]:
+        representative_companies = self._coerce_list(
+            representative.get("companies")
+            or representative.get("company")
+            or representative.get("company_names")
+        )
+        if representative_companies:
+            return representative_companies
+
+        cluster_company_context = cluster.get("company") or []
+        if isinstance(cluster_company_context, list):
+            collected = [
+                item.get("company_name") or item.get("name")
+                for item in cluster_company_context
+                if isinstance(item, dict) and (item.get("company_name") or item.get("name"))
+            ]
+            if collected:
+                return self._coerce_list(collected)
+
+        return []
+
+    def _build_cluster_summary_hints(self, cluster: dict[str, Any], representative: dict[str, Any]) -> list[str]:
+        hints = self._coerce_list(cluster.get("summary_hint"))
+        if hints:
+            return hints
+
+        candidate_hints = []
+        candidate_hints.extend(self._coerce_list(representative.get("media_end_summary")))
+        candidate_hints.extend(self._coerce_list(representative.get("keywords")))
+
+        for news_item in cluster.get("news") or []:
+            if not isinstance(news_item, dict):
+                continue
+            title = str(news_item.get("title") or "").strip()
+            if title:
+                candidate_hints.append(title)
+            if len(candidate_hints) >= 4:
+                break
+
+        deduped: list[str] = []
+        for hint in candidate_hints:
+            if hint and hint not in deduped:
+                deduped.append(hint)
+        return deduped[:4]
 
     def _coerce_id(self, *values: Any) -> str:
         for value in values:
