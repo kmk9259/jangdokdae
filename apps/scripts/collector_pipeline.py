@@ -8,6 +8,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from apps.src.exceptions.pipeline_exceptions import (
     PipelineEnvError,
     PipelineIOError,
@@ -72,10 +75,8 @@ def _run_step(
     fatal=True: 예외 시 PipelineStepError로 re-raise → 파이프라인 중단.
     fatal=False: 예외 로깅 후 StepResult(success=False) 반환 → 계속 진행.
     """
-    logger.info("[pipeline] step=%s start", name)
     try:
         result = fn(run_dir, data, args)
-        logger.info("[pipeline] step=%s done", name)
         return StepResult(name=name, success=True, data=result)
     except Exception as exc:
         logger.error("[pipeline] step=%s failed error=%s", name, exc, exc_info=True)
@@ -93,22 +94,18 @@ def step_collect(run_dir: Path, _data: None, args: argparse.Namespace) -> list[d
     if args.limit:
         articles = articles[: args.limit]
     save_json(articles, run_dir / "news_crawled.json")
-    logger.info("[collect] articles=%d", len(articles))
     return articles
 
 
 def step_preprocess(_run_dir: Path, articles: list[dict], _args: argparse.Namespace) -> list[dict]:
     """수집된 기사 본문을 정제합니다 (중복 제거, 노이즈 텍스트 제거)."""
     result = NewsPreprocessor().preprocess(articles)
-    logger.info("[preprocess] articles=%d", len(result))
     return result
 
 
 def step_embed(_run_dir: Path, articles: list[dict], _args: argparse.Namespace) -> list[dict]:
     """각 기사에 sentence-transformer 임베딩 벡터를 생성합니다."""
     result = NewsEmbedder().embed(articles)
-    dim = len(result[0]["embedding"]) if result else 0
-    logger.info("[embed] articles=%d dim=%d", len(result), dim)
     return result
 
 
@@ -116,8 +113,6 @@ def step_cluster(run_dir: Path, articles: list[dict], _args: argparse.Namespace)
     """임베딩 기반 UMAP+HDBSCAN 클러스터링을 수행하고 news_clusters.json에 저장합니다."""
     clusters = NewsClusterer().cluster(articles)
     save_json(clusters, run_dir / "news_clusters.json")
-    n_single = sum(1 for c in clusters if c["is_singleton"])
-    logger.info("[cluster] clusters=%d singletons=%d", len(clusters), n_single)
     return clusters
 
 
@@ -125,21 +120,18 @@ def step_extract(run_dir: Path, clusters: list[dict], _args: argparse.Namespace)
     """Gemini LLM으로 각 클러스터에서 기업명·섹터·키워드를 추출합니다."""
     result = EntityExtractor().extract(clusters)
     save_json(result, run_dir / "clusters_extracted.json")
-    logger.info("[extract] clusters=%d", len(result))
     return result
 
 
 def step_company(run_dir: Path, clusters: list[dict], _args: argparse.Namespace) -> list[dict]:
     """클러스터에 언급된 기업의 KRX 주가·DART 공시·재무 데이터를 수집합니다."""
     result = CompanyCollector().collect(clusters)
-    logger.info("[company] clusters=%d", len(result))
     return result
 
 
 def step_preprocess_company(run_dir: Path, clusters: list[dict], _args: argparse.Namespace) -> list[dict]:
     """수집된 기업 데이터를 정제합니다 (컬럼명 영문화, 날짜 형식 통일)."""
     result = CompanyPreprocessor().preprocess(clusters)
-    logger.info("[preprocess_company] clusters=%d", len(result))
     return result
 
 
@@ -149,7 +141,6 @@ def step_macro(run_dir: Path, clusters: list[dict], _args: argparse.Namespace) -
     for cluster in clusters:
         cluster["macro_data"] = macro_data
     save_json(clusters, run_dir / "clusters_final.json")
-    logger.info("[macro] indicators=%d rows=%d", len(macro_data[0]) - 1 if macro_data else 0, len(macro_data))
     return clusters
 
 
@@ -182,7 +173,6 @@ def main() -> None:
     except OSError as exc:
         raise PipelineIOError(f"Cannot create run dir", path=str(run_dir)) from exc
 
-    logger.info("[pipeline] start run_id=%s", run_id)
     _validate_env()
 
     data: Any = None
@@ -197,8 +187,6 @@ def main() -> None:
 
     if failed_steps:
         logger.warning("[pipeline] done with non-fatal failures steps=%s run_id=%s output=%s", failed_steps, run_id, run_dir)
-    else:
-        logger.info("[pipeline] done run_id=%s output=%s", run_id, run_dir)
 
 
 if __name__ == "__main__":

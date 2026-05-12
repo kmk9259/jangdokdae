@@ -33,10 +33,6 @@ class NewsPreprocessor:
             if article["content"]:
                 result.append(article)
 
-        logger.info(
-            "[preprocess] before=%d after=%d removed=%d",
-            before, len(result), before - len(result),
-        )
         return result
 
     def _clean(self, text: str) -> str:

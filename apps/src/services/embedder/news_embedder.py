@@ -28,7 +28,6 @@ class NewsEmbedder:
         if not model_name:
             raise EmbedModelError("EMBED_MODEL environment variable is not set")
         device = "mps" if torch.backends.mps.is_available() else "cpu"
-        logger.info("[embed] loading model=%s device=%s", model_name, device)
         try:
             self._model = SentenceTransformer(model_name, device=device)
         except Exception as exc:
@@ -49,8 +48,6 @@ class NewsEmbedder:
             for chunk in self._chunk(text):
                 chunk_index.append(i)
                 chunk_texts.append(chunk)
-
-        logger.info("[embed] encoding articles=%d chunks=%d", len(articles), len(chunk_texts))
         try:
             chunk_embeddings = self._model.encode(
                 chunk_texts,

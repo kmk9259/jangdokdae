@@ -73,13 +73,6 @@ class EntityExtractor:
                     "sectors": self._sectors_text,
                 })
                 cluster["extraction"] = result.model_dump()
-                logger.info(
-                    "[extract] cluster_id=%d companies=%s sectors=%s keywords=%s",
-                    cluster["cluster_id"],
-                    result.companies,
-                    result.sectors,
-                    result.keywords,
-                )
             except Exception as exc:
                 exc_str = str(exc).lower()
                 if "rate" in exc_str or "quota" in exc_str or "429" in exc_str or "exhausted" in exc_str:

@@ -1,7 +1,6 @@
 """pyKRX 시장 데이터 수집."""
 
 import logging
-import os
 from datetime import datetime, timedelta
 
 from pykrx import stock
@@ -42,24 +41,3 @@ def fetch_ohlcv(krx_code: str, days: int = 60, end_date: str | None = None) -> l
         raise
     except Exception as exc:
         raise KRXDataError(f"OHLCV fetch failed krx_code={krx_code}") from exc
-
-
-def fetch_investor_trading(krx_code: str, days: int = 60, end_date: str | None = None) -> list[dict]:
-    """투자자별 거래량을 최근 days 거래일 기준으로 수집합니다. 날짜 내림차순.
-
-    KRX 로그인 자격증명이 없으면 빈 리스트를 반환합니다.
-    """
-    if not (os.environ.get("KRX_ID") and os.environ.get("KRX_PASSWORD")):
-        logger.debug("[krx] KRX_ID/KRX_PASSWORD 미설정 — investor_trading 수집 건너뜀")
-        return []
-    end_date = end_date or datetime.now().strftime("%Y%m%d")
-    start, end = _date_range(days, end_date)
-    try:
-        df = stock.get_market_trading_volume_by_investor(start, end, krx_code)
-        if df is None or df.empty:
-            raise KRXDataError(f"investor trading empty krx_code={krx_code}")
-        return _trim_and_convert(df, days)
-    except KRXDataError:
-        raise
-    except Exception as exc:
-        raise KRXDataError(f"investor trading fetch failed krx_code={krx_code}") from exc

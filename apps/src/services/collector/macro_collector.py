@@ -30,7 +30,6 @@ def fetch_macro_data(
     import yfinance as yf
 
     tickers = tickers or MACRO_TICKERS
-    logger.info("[macro] download period=%s interval=%s tickers=%d", period, interval, len(tickers))
 
     raw = yf.download(
         tickers=list(tickers.values()),
@@ -54,5 +53,4 @@ def fetch_macro_data(
     close_df = pd.DataFrame(cols)
 
     result = dataframe_to_records(close_df.reset_index())
-    logger.info("[macro] done rows=%d columns=%d", len(result), len(close_df.columns))
     return result

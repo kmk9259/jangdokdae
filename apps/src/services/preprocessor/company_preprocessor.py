@@ -32,7 +32,6 @@ class CompanyPreprocessor:
             cluster["company_data"] = [
                 self._process(co) for co in cluster.get("company_data", [])
             ]
-        logger.info("[preprocess_company] done clusters=%d", len(clusters))
         return clusters
 
     def _process(self, co: dict) -> dict:

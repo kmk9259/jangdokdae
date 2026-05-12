@@ -61,7 +61,6 @@ class NewsCollector:
             press, published_date, content 필드를 가집니다.
         """
         date = date or datetime.now().strftime("%Y%m%d")
-        logger.info("[news] start date=%s max_pages=%d concurrency=%d", date, self.max_pages, self.concurrency)
 
         raw_items = self._fetch_all_pages(date)
         articles = self._build_articles(raw_items)
@@ -70,7 +69,6 @@ class NewsCollector:
         articles = [a for a in articles if a["content"]]
         articles.sort(key=lambda a: a["published_date"] or "")
 
-        logger.info("[news] done fetched=%d body_parsed=%d kept=%d", total_fetched, naver_parsed, len(articles))
         return articles
 
     def _fetch_all_pages(self, date: str) -> list[dict]:
@@ -81,11 +79,8 @@ class NewsCollector:
                 time.sleep(self.delay_ms / 1000)
             items = self._fetch_page(date, page)
             if not items:
-                logger.info("[news] page=%d empty — stopping", page)
                 break
             raw_items.extend(items)
-            logger.info("[news] page=%d items=%d total=%d", page, len(items), len(raw_items))
-        logger.info("[news] list done total=%d", len(raw_items))
         return raw_items
 
     def _fetch_page(self, date: str, page: int) -> list[dict]:

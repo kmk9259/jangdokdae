@@ -44,14 +44,12 @@ class NewsClusterer:
             각 기사에서 embedding 필드는 제거됩니다.
         """
         embeddings = np.array([a["embedding"] for a in articles], dtype=np.float32)
-        logger.info("[cluster] articles=%d dim=%d", len(articles), embeddings.shape[1])
 
         reduced = self._reduce(embeddings)
         labels = self._hdbscan(reduced)
 
         n_noise = int((labels == -1).sum())
         n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
-        logger.info("[cluster] hdbscan clusters=%d noise=%d", n_clusters, n_noise)
 
         return self._build_clusters(articles, embeddings, labels)
 
@@ -103,14 +101,6 @@ class NewsClusterer:
         for i in (cluster_map.get(-1) or []):
             clusters.append(self._make_cluster(next_id, [i], articles, embeddings, is_singleton=True))
             next_id += 1
-
-        n_singleton = len(cluster_map.get(-1) or [])
-        logger.info(
-            "[cluster] total=%d multi=%d singleton=%d",
-            len(clusters),
-            len(clusters) - n_singleton,
-            n_singleton,
-        )
         return clusters
 
     def _make_cluster(
