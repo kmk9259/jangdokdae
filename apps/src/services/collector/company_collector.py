@@ -7,7 +7,7 @@ from datetime import datetime
 import OpenDartReader as ODR
 import pandas as pd
 
-from apps.src.exceptions.company_exceptions import CompanyMatchError, DARTDataError, KRXDataError
+from apps.src.exceptions.company_exceptions import CompanyMatchError, DARTDataError, FFDataError
 from apps.src.services.collector.company_master_collector import CompanyMasterCollector
 from apps.src.services.collector.dart_collector import (
     fetch_disclosure_list,
