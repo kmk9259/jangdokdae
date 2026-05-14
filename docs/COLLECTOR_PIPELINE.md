@@ -64,6 +64,10 @@ DB 저장: clusters, cluster_articles
 | ⑤ 엔티티 추출 | `extractor/entity_extractor.py` | 클러스터 기사 | 기업·섹터·키워드 + DB | `GEMINI_API_KEY`, `LLM_MODEL` |
 | ⑥ 기업 수집 | `collector/company_collector.py` | 기업명 목록 | KRX 시세, DART 공시·재무 | `OPENDART_API_KEY` |
 | ⑦ 기업 전처리 | `preprocessor/company_preprocessor.py` | 원시 기업 데이터 | 정제 + DB 저장 | - |
+
+> **⑦ DB 저장 상세**: `repositories/pipeline_store.py`의 `PipelineStore`가 저장을 담당합니다.
+> - 재무제표 long→wide 피벗: `preprocessor/dart_preprocessor.py`의 `pivot_financial_to_wide()` 호출
+> - 사업보고서 임베딩: 파이프라인 시작 시 생성된 `NewsEmbedder` 인스턴스를 `PipelineStore(embedder=...)` 형태로 주입받아 사용
 | ⑧ 거시지표 | `collector/macro_collector.py` | - | `clusters_final.json` | - |
 
 ---

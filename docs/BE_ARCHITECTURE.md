@@ -121,7 +121,9 @@ jangdokdae-server/
         │   │
         │   ├── preprocessor/    # 수집 데이터 전처리 (파이프라인용)
         │   │   ├── news_preprocessor.py        # 노이즈 제거, 중복 제거
-        │   │   ├── dart_preprocessor.py        # 재무제표 정규화, 섹션 파싱
+        │   │   ├── dart_preprocessor.py        # 재무제표 정규화·피벗, 섹션 파싱
+        │   │   │                                 pivot_financial_to_wide()로
+        │   │   │                                 long→wide 변환 담당
         │   │   └── company_preprocessor.py     # 컬럼명 영문화, 날짜 통일
         │   │
         │   ├── embedder/        # 임베딩·클러스터링 (파이프라인용)
@@ -133,8 +135,9 @@ jangdokdae-server/
         │   │
         │   └── contents/        # 콘텐츠 생성 (미구현)
         │
-        ├── db/                  # DB 직접 조작 (파이프라인용)
+        ├── repositories/        # DB 직접 조작 (파이프라인용, Repository 패턴)
         │   └── pipeline_store.py  # 파이프라인 각 단계 결과 DB 저장
+        │                            생성 시 NewsEmbedder 주입 필요
         │
         ├── exceptions/          # 커스텀 예외 클래스 (파이프라인용)
         │   ├── base.py          # PipelineError 베이스, ErrorCode enum
@@ -166,6 +169,7 @@ jangdokdae-server/
 | `dependencies/` | 공통 인증·검증 | "로그인 확인은 어떻게 하나?" |
 | `services/auth/` | JWT·OAuth 처리 | "토큰 생성·검증, 소셜 로그인 처리" |
 | `services/collector~extractor/` | 뉴스 파이프라인 | "뉴스를 어떻게 수집·분석하나?" |
+| `repositories/` | DB 읽기·쓰기 (Repository 패턴) | "파이프라인 결과를 DB에 어떻게 저장하나?" |
 | `config/` | 환경·DB·상수 설정 | "DB 연결, 섹터 목록은 어디서?" |
 | `utils/` | 재사용 유틸 함수 | "자주 쓰는 도구 함수들" |
 
