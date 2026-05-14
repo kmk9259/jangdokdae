@@ -31,7 +31,7 @@ Neon PostgreSQL (클라우드)
 | ORM | SQLAlchemy 2.0 (async) | Python ↔ DB 연결 |
 | 벡터 검색 | pgvector | 뉴스 임베딩 유사도 검색 |
 | 인증 | OAuth 2.0 + JWT | 카카오·구글 소셜 로그인 |
-| LLM | Gemini (Google) | 뉴스 엔티티 추출 |
+| LLM | Gemini (Google AI Studio / Vertex AI) | 뉴스 엔티티 추출 |
 | 임베딩 | ko-sroberta-multitask | 한국어 뉴스 벡터화 |
 | 클러스터링 | UMAP + HDBSCAN | 유사 뉴스 그룹화 |
 
@@ -78,7 +78,9 @@ jangdokdae-server/
         │   │                      API와 프론트 모두 이 파일을 참조
         │   ├── paths.py         # 프로젝트 경로 상수 (DATA_DIR 등)
         │   ├── dart_accounts.py # DART 재무제표 계정명 매핑
-        │   └── macro_tickers.py # Yahoo Finance 거시지표 티커 목록
+        │   ├── macro_tickers.py # Yahoo Finance 거시지표 티커 목록
+        │   └── google_vertex_conf.py # Vertex AI / Gemini API 설정
+        │                              GEMINI_USE_VERTEX=true 시 Cloud 크레딧 적용
         │
         ├── dependencies/        # ★ FastAPI 공통 의존성
         │   └── auth.py          # get_current_user()

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 
-from apps.src.config import cofig
+from apps.src.config import google_vertex_conf as cofig
 from apps.src.models.DTO import (
     AnalysisPointRecord,
     AnalysisRequest,

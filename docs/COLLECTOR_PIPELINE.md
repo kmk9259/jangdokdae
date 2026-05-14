@@ -61,7 +61,7 @@ DB 저장: clusters, cluster_articles
 | ② 전처리 | `preprocessor/news_preprocessor.py` | 수집 기사 | 정제된 기사 + DB 저장 | - |
 | ③ 임베딩 | `embedder/news_embedder.py` | 기사 본문 | 768차원 벡터 | `EMBED_MODEL` |
 | ④ 클러스터링 | `embedder/news_clusterer.py` | 임베딩 벡터 | `news_clusters.json` + DB | - |
-| ⑤ 엔티티 추출 | `extractor/entity_extractor.py` | 클러스터 기사 | 기업·섹터·키워드 + DB | `GEMINI_API_KEY`, `LLM_MODEL` |
+| ⑤ 엔티티 추출 | `extractor/entity_extractor.py` | 클러스터 기사 | 기업·섹터·키워드 + DB | `LLM_MODEL` + (`GEMINI_API_KEY` 또는 Vertex AI 설정) |
 | ⑥ 기업 수집 | `collector/company_collector.py` | 기업명 목록 | KRX 시세, DART 공시·재무 | `OPENDART_API_KEY` |
 | ⑦ 기업 전처리 | `preprocessor/company_preprocessor.py` | 원시 기업 데이터 | 정제 + DB 저장 | - |
 
@@ -80,9 +80,20 @@ DB 저장: clusters, cluster_articles
 # ③ 임베딩 모델 (변경 금지 — 기존 벡터 무효화됨)
 EMBED_MODEL=jhgan/ko-sroberta-multitask
 
-# ⑤ Gemini LLM
-GEMINI_API_KEY=<Google AI Studio에서 발급>
-LLM_MODEL=gemini-2.0-flash-lite
+# ⑤ Gemini LLM — 두 가지 방식 중 하나 선택
+
+# [방식 A] Vertex AI (Google Cloud 크레딧 적용, 권장)
+# 사전 조건: gcloud auth application-default login 실행 필요
+GEMINI_USE_VERTEX=true
+GOOGLE_CLOUD_PROJECT=<Google Cloud 프로젝트 ID>
+GOOGLE_CLOUD_LOCATION=asia-northeast3
+VERTEX_MODEL=gemini-2.5-flash
+LLM_MODEL=gemini-2.5-flash
+
+# [방식 B] Google AI Studio API 키 (Cloud 크레딧 미적용)
+# GEMINI_USE_VERTEX=false
+# GEMINI_API_KEY=<Google AI Studio에서 발급>
+# LLM_MODEL=gemini-2.0-flash-lite
 
 # ⑥ DART 공시 API
 OPENDART_API_KEY=<DART 오픈 API에서 발급>
