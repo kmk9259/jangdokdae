@@ -196,3 +196,73 @@ def normalize_financial_statements(
             records.append({**base, "period_type": period_type, "period_name": to_json_safe(row.get(period_col)), "year": year, "amount": amount, "currency": "KRW"})
 
     return records
+
+
+# 한글 계정명 → dart_financial_statements 컬럼명 매핑
+_ACCOUNT_TO_COL: dict[str, str] = {
+    "매출액":                          "revenue",
+    "영업이익":                        "operating_income",
+    "영업이익(손실)":                  "operating_income",
+    "법인세차감전순이익(손실)":        "income_before_tax",
+    "법인세차감전계속사업이익(손실)":  "income_before_tax",
+    "법인세차감전 순이익":             "income_before_tax",
+    "당기순이익":                      "net_income",
+    "당기순이익(손실)":                "net_income",
+    "유동자산":                        "current_assets",
+    "자산총계":                        "total_assets",
+    "유동부채":                        "current_liabilities",
+    "부채총계":                        "total_liabilities",
+    "자본금":                          "capital_stock",
+    "이익잉여금":                      "retained_earnings",
+    "자본총계":                        "total_equity",
+}
+
+
+def _safe_int(value: Any) -> int | None:
+    try:
+        return int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def pivot_financial_to_wide(records: list[dict]) -> list[dict]:
+    """long-format 재무 레코드를 wide-format 행으로 피벗.
+
+    normalize_financial_statements() 결과를 받아
+    (fs_div, year) 단위로 묶고 DB INSERT에 바로 사용 가능한 dict 목록을 반환.
+    """
+    groups: dict[tuple, dict] = {}
+    last_rec: dict = {}
+    for rec in records:
+        if rec.get("period_type") != "당기":
+            continue
+        col = _ACCOUNT_TO_COL.get(rec.get("account_nm", ""))
+        if col is None:
+            continue
+        key = (rec["fs_div"], rec["year"])
+        if key not in groups:
+            groups[key] = {"fs_div": rec["fs_div"], "year": rec["year"]}
+        groups[key][col] = _safe_int(rec.get("amount"))
+        last_rec = rec
+
+    rows = []
+    for (fs_div, year), vals in groups.items():
+        rows.append({
+            "fiscal_year":         year,
+            "fs_div":              fs_div,
+            "rcept_no":            last_rec.get("rcept_no") or "",
+            "reprt_code":          "11011",
+            "revenue":             vals.get("revenue"),
+            "operating_income":    vals.get("operating_income"),
+            "income_before_tax":   vals.get("income_before_tax"),
+            "net_income":          vals.get("net_income"),
+            "current_assets":      vals.get("current_assets"),
+            "total_assets":        vals.get("total_assets"),
+            "current_liabilities": vals.get("current_liabilities"),
+            "total_liabilities":   vals.get("total_liabilities"),
+            "capital_stock":       vals.get("capital_stock"),
+            "retained_earnings":   vals.get("retained_earnings"),
+            "total_equity":        vals.get("total_equity"),
+            "currency":            "KRW",
+        })
+    return rows

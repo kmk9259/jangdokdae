@@ -26,7 +26,7 @@ from apps.src.services.embedder.news_embedder import NewsEmbedder
 from apps.src.services.extractor.entity_extractor import EntityExtractor
 from apps.src.services.preprocessor.news_preprocessor import NewsPreprocessor
 from apps.src.utils.json_utils import save_json
-from apps.src.db import PipelineStore
+from apps.src.repositories import PipelineStore
 
 logging.basicConfig(
     level=logging.INFO,
@@ -177,7 +177,8 @@ def main() -> None:
 
     _validate_env()
 
-    repo = PipelineStore()
+    embedder = NewsEmbedder()
+    repo = PipelineStore(embedder=embedder)
     run_date = datetime.now().date()
 
     data: Any = None

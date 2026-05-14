@@ -12,27 +12,9 @@ from apps.src.models.article import Article
 from apps.src.models.cluster import Cluster, ClusterArticle, EntityExtraction
 from apps.src.models.company import CompanyMaster, DartDocument, DartFinancialStatement
 from apps.src.services.embedder.news_embedder import NewsEmbedder
+from apps.src.services.preprocessor.dart_preprocessor import pivot_financial_to_wide
 
 logger = logging.getLogger(__name__)
-
-# dart_accounts.py TARGET_ACCOUNTS → dart_financial_statements 컬럼 매핑
-_ACCOUNT_TO_COL: dict[str, str] = {
-    "매출액":                          "revenue",
-    "영업이익":                        "operating_income",
-    "영업이익(손실)":                  "operating_income",
-    "법인세차감전순이익(손실)":        "income_before_tax",
-    "법인세차감전계속사업이익(손실)":  "income_before_tax",
-    "법인세차감전 순이익":             "income_before_tax",
-    "당기순이익":                      "net_income",
-    "당기순이익(손실)":                "net_income",
-    "유동자산":                        "current_assets",
-    "자산총계":                        "total_assets",
-    "유동부채":                        "current_liabilities",
-    "부채총계":                        "total_liabilities",
-    "자본금":                          "capital_stock",
-    "이익잉여금":                      "retained_earnings",
-    "자본총계":                        "total_equity",
-}
 
 # dart_document section 키 → 한국어 섹션명
 _SECTION_NAMES: dict[str, str] = {
@@ -44,6 +26,9 @@ _SECTION_NAMES: dict[str, str] = {
 
 class PipelineStore:
     """파이프라인 단계별 DB 저장 메서드 모음. 모든 메서드는 async."""
+
+    def __init__(self, embedder: NewsEmbedder) -> None:
+        self._embedder = embedder
 
     # ── articles ──────────────────────────────────────────────────────────────
 
@@ -205,7 +190,6 @@ class PipelineStore:
 
     async def save_company_data(self, clusters: list[dict]) -> None:
         """기업 마스터·재무제표·사업보고서 섹션을 저장."""
-        embedder = NewsEmbedder()
         seen: set[str] = set()
 
         async with AsyncSessionLocal() as session:
@@ -221,7 +205,6 @@ class PipelineStore:
                         sector = company.get("sector")
                         market = company.get("market")
 
-                        # company_master UPSERT (krx_code 기준)
                         company_pk = await _upsert_company(
                             session, krx_code, dart_code, company["company_name"], dart_name, sector, market
                         )
@@ -230,15 +213,13 @@ class PipelineStore:
                             continue
                         seen.add(krx_code)
 
-                        # dart_financial_statements UPSERT
                         fin_stmts = company.get("dart", {}).get("financial_statements", [])
                         if fin_stmts:
                             await _upsert_financial_statements(session, company_pk, fin_stmts)
 
-                        # dart_document INSERT (사업보고서 섹션)
                         biz_report = company.get("dart", {}).get("business_report")
                         if biz_report:
-                            await _insert_dart_documents(session, company_pk, biz_report, embedder)
+                            await _insert_dart_documents(session, company_pk, biz_report, self._embedder)
 
         logger.info("[store] company_data saved companies=%d", len(seen))
 
@@ -278,44 +259,19 @@ async def _upsert_company(
 async def _upsert_financial_statements(
     session: Any, company_id: int, records: list[dict]
 ) -> None:
-    """long-format 재무 레코드를 wide-format row로 피벗해 UPSERT."""
-    groups: dict[tuple, dict] = {}
-    for rec in records:
-        if rec.get("period_type") != "당기":
-            continue
-        col = _ACCOUNT_TO_COL.get(rec.get("account_nm", ""))
-        if col is None:
-            continue
-        key = (rec["fs_div"], rec["year"])
-        if key not in groups:
-            groups[key] = {"fs_div": rec["fs_div"], "year": rec["year"]}
-        groups[key][col] = _safe_int(rec.get("amount"))
-
-    if not groups:
+    """long-format 재무 레코드를 dart_preprocessor로 피벗 후 UPSERT."""
+    wide_rows = pivot_financial_to_wide(records)
+    if not wide_rows:
         return
 
-    rows = []
-    for (fs_div, year), vals in groups.items():
-        rows.append({
-            "company_id":          company_id,
-            "fiscal_year":         year,
-            "fs_div":              fs_div,
-            "rcept_no":            rec.get("rcept_no") or "",
-            "reprt_code":          "11011",
-            "revenue":             vals.get("revenue"),
-            "operating_income":    vals.get("operating_income"),
-            "income_before_tax":   vals.get("income_before_tax"),
-            "net_income":          vals.get("net_income"),
-            "current_assets":      vals.get("current_assets"),
-            "total_assets":        vals.get("total_assets"),
-            "current_liabilities": vals.get("current_liabilities"),
-            "total_liabilities":   vals.get("total_liabilities"),
-            "capital_stock":       vals.get("capital_stock"),
-            "retained_earnings":   vals.get("retained_earnings"),
-            "total_equity":        vals.get("total_equity"),
-            "currency":            "KRW",
-            "updated_at":          datetime.now(),
-        })
+    rows = [
+        {
+            "company_id": company_id,
+            "updated_at": datetime.now(),
+            **row,
+        }
+        for row in wide_rows
+    ]
 
     await session.execute(
         insert(DartFinancialStatement.__table__)
@@ -334,7 +290,7 @@ async def _upsert_financial_statements(
 
 
 async def _insert_dart_documents(
-    session: Any, company_id: int, biz_report: dict, embedder: Any = None
+    session: Any, company_id: int, biz_report: dict, embedder: NewsEmbedder
 ) -> None:
     """사업보고서 섹션을 소제목 단위로 dart_document에 저장."""
     sections: dict = biz_report.get("sections", {})
@@ -352,7 +308,7 @@ async def _insert_dart_documents(
             if not content.strip():
                 continue
             subsection = chunk.get("subsection") or ""
-            embedding = embedder.embed_text(content) if embedder else None
+            embedding = embedder.embed_text(content)
             rows.append({
                 "company_id":    company_id,
                 "document_type": "business_report",
@@ -384,13 +340,6 @@ def _parse_dt(value: str | None) -> datetime | None:
         except ValueError:
             continue
     return None
-
-
-def _safe_int(value: Any) -> int | None:
-    try:
-        return int(value) if value is not None else None
-    except (TypeError, ValueError):
-        return None
 
 
 def _parse_fiscal_year(rcept_dt: str) -> int:
