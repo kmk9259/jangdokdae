@@ -83,49 +83,51 @@
 ## 📁 프로젝트 구조
 
 ```
-jangdokdae/
-├── main.py                              # FastAPI 앱 엔트리포인트
-├── requirements.txt                     # Python 의존성
-├── .env
+jangdokdae-server/
+├── pyproject.toml                       # Python 의존성 및 pytest 설정
+├── uv.lock                              # 잠금 의존성
+├── .env.example                         # 환경 변수 예시
 │
-├── apps/                                # 서비스 코어 (Backend)
-│   ├── api/
-│   │   └── v1/
-│   │       └── endpoints/
-│   │           ├── health.py            # 헬스체크
-│   │           ├── news.py              # 뉴스 조회 / 검색 API
-│   │           ├── analysis.py          # 분석 결과 API
-│   │           └── content.py           # 학습 콘텐츠 API
+├── apps/
+│   ├── main.py                          # FastAPI 앱 엔트리포인트
+│   ├── scripts/
+│   │   ├── collector_pipeline.py        # 데이터 수집 파이프라인 실행
+│   │   ├── generate_issue_docents.py    # Issue Docent 생성 wrapper
+│   │   └── db/
+│   │       └── create_issue_docent.sql  # Parent DB 수동 반영 SQL
 │   │
-│   ├── core/
-│   │   └── config.py                    # 환경변수 및 설정 (pydantic-settings)
-│   │
-│   ├── db/
-│   │   ├── base.py                      
-│   │   └── session.py                   # 비동기 세션 관리
-│   │
-│   ├── models/
-│   │   └── models.py                    # ORM 모델 (뉴스, 분석, 학습콘텐츠)
-│   │
-│   ├── schemas/
-│   │   └── news.py                      
-│   │
-│   ├── services/
-│   │   ├── collector/
-│   │   │   └── news_collector.py        # 뉴스 수집 (Naver API, RSS, DART)
-│   │   ├── embedder/
-│   │   │   └── embedding_service.py     # OpenAI 임베딩 + Qdrant 저장
-│   │   ├── preprocessor/
-│   │   │   └── preprocessor.py          # 텍스트 전처리 + KoNLPy 키워드 추출
-│   │   ├── analyzer/
-│   │   │   └── analyzer_service.py      # Gemini + LangGraph 요약 / 분석
-│   │   └── content_generator/
-│   │       └── content_generator.py     # 학습 콘텐츠 생성 (해설 + 용어 + 퀴즈)
-│   │
-│   └── tasks.py                         # 비동기 파이프라인 정의
+│   └── src/
+│       ├── api/                         # HTTP 라우터
+│       │   ├── auth.py
+│       │   ├── users.py
+│       │   └── issue_docent.py
+│       ├── config/                      # DB, 경로, 외부 설정
+│       ├── dependencies/                # FastAPI 의존성
+│       ├── models/                      # ORM 모델
+│       ├── repositories/                # DB 조회/저장 계층
+│       ├── schemas/                     # API 및 LLM 출력 스키마
+│       ├── services/
+│       │   ├── collector/
+│       │   ├── preprocessor/
+│       │   ├── embedder/
+│       │   ├── extractor/
+│       │   ├── analyzer/
+│       │   ├── auth/
+│       │   └── issue_docent/            # Issue Docent 읽기/생성 서비스
+│       └── issue_docent/                # Issue Docent 전용 도메인
+│           ├── graphs/                  # LangGraph 워크플로우
+│           ├── llm/                     # LLM client 및 prompt loader
+│           ├── prompts/                 # article brief / summary / docent / quiz prompt
+│           └── scripts/                 # 실제 생성 스크립트 구현
 │
-├── docs/                                # ERD, API 문서, 설계 자료
-└── scripts/                             # DB 마이그레이션, 초기 데이터 스크립트
+├── docs/
+│   ├── AUTH_ONBOARDING.md
+│   ├── BE_ARCHITECTURE.md
+│   └── issue_docent_upload_to_neon.md
+│
+└── tests/
+    ├── api/
+    └── unit/
 ```
 
 ---
@@ -217,7 +219,6 @@ LangGraph의 상태 기반 워크플로우를 사용하면 각 단계의 실행 
 ### 사전 준비
 
 - Python 3.12+
-- Node.js 18+ (프론트엔드)
 - Google Gemini API Key
 - OpenAI API Key (임베딩용)
 - 네이버 개발자 앱 (Client ID / Secret)
@@ -226,8 +227,8 @@ LangGraph의 상태 기반 워크플로우를 사용하면 각 단계의 실행 
 ### 1. 저장소 클론
 
 ```bash
-git clone https://github.com/kmk9259/jangdokdae.git
-cd jangdokdae
+git clone https://github.com/9990-jangdokdae/jangdokdae-server.git
+cd jangdokdae-server
 ```
 
 ### 2. 환경변수 설정
@@ -240,18 +241,11 @@ cp .env.example .env
 ### 3. 백엔드 실행
 
 ```bash
-# 가상환경 생성 및 활성화
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-
 # 의존성 설치
-pip install -r requirements.txt
-
-# DB 마이그레이션
-alembic upgrade head
+uv sync
 
 # API 서버 실행
-uvicorn main:app --reload --port 8000
+uv run uvicorn apps.main:app --reload --port 8000
 
 # Celery Worker 실행 (별도 터미널)
 celery -A apps.tasks.celery_app worker --loglevel=info
@@ -260,29 +254,13 @@ celery -A apps.tasks.celery_app worker --loglevel=info
 celery -A apps.tasks.celery_app beat --loglevel=info
 ```
 
-### 4. 프론트엔드 실행
+`issue_docent` 테이블을 Parent DB에 수동 반영해야 하면 [docs/issue_docent_upload_to_neon.md](docs/issue_docent_upload_to_neon.md)를 참고합니다.
 
-```bash
-cd frontend
-npm install
-npm start
-```
+### 4. 프론트엔드
 
-### 5. Docker로 전체 실행 (운영 환경 권장)
+프론트엔드는 별도 저장소 `jangdokdae-client`에서 관리합니다.
 
-```bash
-docker-compose up --build
-```
-
-| 서비스 | 포트 |
-|--------|------|
-| React (Frontend) | 3000 |
-| FastAPI (Backend) | 8000 |
-| PostgreSQL | 5432 |
-| Redis | 6379 |
-| Qdrant | 6333 |
-
-### 6. API 문서 확인
+### 5. API 문서 확인
 
 - Swagger UI: http://localhost:8000/docs
 - ReDoc: http://localhost:8000/redoc
@@ -365,6 +343,26 @@ docker-compose up --build
   "difficulty": "beginner"
 }
 ```
+
+### 🧭 Issue Docent (`/contents/issue-docent`)
+
+Issue Docent는 클러스터 1개를 하나의 주린이 학습 콘텐츠로 생성하고 조회하는 API입니다.
+
+| Method | Endpoint | 설명 |
+|--------|----------|------|
+| `GET` | `/contents/issue-docent?limit=20&offset=0` | Issue Docent 목록 조회 |
+| `GET` | `/contents/issue-docent/{id}` | Issue Docent 상세 조회 |
+
+상세 응답은 구조화된 본문(`explanation`), 원문 기사 목록(`articles`), 저장된 퀴즈(`quizzes`), 본문 용어 매칭 결과(`matched_terms`)를 포함합니다.
+
+생성 스크립트는 다음 wrapper로 실행합니다.
+
+```bash
+uv run python apps/scripts/generate_issue_docents.py --limit 5
+uv run python apps/scripts/generate_issue_docents.py --cluster-id 14 --force
+```
+
+Parent DB에 `issue_docent` 테이블을 수동 생성해야 하는 경우 [docs/issue_docent_upload_to_neon.md](docs/issue_docent_upload_to_neon.md)를 따릅니다.
 
 ---
 
