@@ -246,6 +246,12 @@ uv sync
 
 # API 서버 실행
 uv run uvicorn apps.main:app --reload --port 8000
+
+# Celery Worker 실행 (별도 터미널)
+celery -A apps.tasks.celery_app worker --loglevel=info
+
+# Celery Beat 실행 (스케줄러, 별도 터미널)
+celery -A apps.tasks.celery_app beat --loglevel=info
 ```
 
 `issue_docent` 테이블을 Parent DB에 수동 반영해야 하면 [docs/issue_docent_upload_to_neon.md](docs/issue_docent_upload_to_neon.md)를 참고합니다.
