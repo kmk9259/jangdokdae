@@ -29,7 +29,7 @@ def _is_production() -> bool:
 
 def _callback_url(request: Request, provider: str) -> str:
     base = str(request.base_url).rstrip("/")
-    return f"{base}/auth/{provider}/callback"
+    return f"{base}/api/v1/auth/{provider}/callback"
 
 
 async def _upsert_user(session: AsyncSession, user_info: dict) -> User:

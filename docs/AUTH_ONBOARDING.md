@@ -81,7 +81,7 @@ CREATE TABLE users (
 ## 섹터 목록 관리
 
 섹터는 **`apps/src/config/sectors.py`** 파일 하나에서 관리합니다.
-API 응답(`GET /user/sectors`)과 온보딩 UI 모두 이 파일을 단일 진실 소스로 사용합니다.
+API 응답(`GET /api/v1/user/sectors`)과 온보딩 UI 모두 이 파일을 단일 진실 소스로 사용합니다.
 
 ```python
 SECTORS: list[str] = [

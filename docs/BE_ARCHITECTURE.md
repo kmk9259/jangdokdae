@@ -65,9 +65,9 @@ jangdokdae-server/
         │
         ├── api/                 # ★ HTTP 엔드포인트 (라우터 레이어)
         │   │                      URL 경로와 처리 함수를 연결하는 역할
-        │   ├── auth.py          # /auth/* 엔드포인트
+        │   ├── auth.py          # /api/v1/auth/* 엔드포인트
         │   │                      로그인, 콜백, 내 정보, 로그아웃
-        │   └── users.py         # /user/* 엔드포인트
+        │   └── users.py         # /api/v1/user/* 엔드포인트
         │                          섹터 목록, 관심 프로필 조회·수정
         │
         ├── config/              # ★ 앱 전반 설정값
@@ -179,7 +179,7 @@ jangdokdae-server/
 
 ## 요청 처리 흐름 예시
 
-`GET /user/profile` 요청이 처리되는 순서:
+`GET /api/v1/user/profile` 요청이 처리되는 순서:
 
 ```
 1. 요청 도착
