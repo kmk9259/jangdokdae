@@ -362,7 +362,7 @@ Parent DB에 `issue_docent` 테이블을 수동 생성해야 하는 경우 [docs
 
 ## 🔄 데이터 파이프라인
 
-뉴스 수집 파이프라인과 Issue Docent 생성 워크플로우는 각각 실행 스크립트로 관리합니다. Issue Docent 생성 단계는 LangGraph로 오케스트레이션합니다.
+뉴스 수집부터 학습 콘텐츠 생성까지 전 과정이 **LangGraph + Celery**로 자동화됩니다.
 
 ```
 [주기마다]
