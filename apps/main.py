@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from apps.src.api.auth import router as auth_router
 from apps.src.api.issue_docent import router as issue_docent_router
-from apps.src.api.users import router as user_router
+from apps.src.api.users import analyzer_router, router as user_router
 
 
 def create_app() -> FastAPI:
@@ -27,6 +27,7 @@ def create_app() -> FastAPI:
 
     app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
     app.include_router(user_router, prefix="/api/v1/user", tags=["user"])
+    app.include_router(analyzer_router, prefix="/api/v1/analysis", tags=["analysis"])
     app.include_router(issue_docent_router)
 
     @app.get("/health")
