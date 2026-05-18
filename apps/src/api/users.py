@@ -1,4 +1,4 @@
-"""사용자 관심 프로필 및 섹터 목록 라우터."""
+"""사용자 관심 프로필 API."""
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import select

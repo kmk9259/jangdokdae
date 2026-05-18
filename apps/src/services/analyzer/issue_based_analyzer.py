@@ -3,306 +3,125 @@ from __future__ import annotations
 import json
 import re
 
-from apps.src.config import google_vertex_conf as cofig
+from langchain_google_genai import ChatGoogleGenerativeAI
+
+from apps.src.config import cofig
 from apps.src.models.DTO import (
-    AnalysisPointRecord,
+    AnalysisSection,
     AnalysisRequest,
     AnalysisResponse,
-    CoverageCheck,
-    IssueCandidateRecord,
-    KeyNumberRecord,
+    AnalysisSummary,
+    KeyMetric,
+    LLMAnalysisResponse,
+    RelatedCompanyCard,
+    RelatedMarketCard,
+    SidebarContext,
 )
-
-
-POINT_PRIORITY = {
-    "시장반응": 0,
-    "핵심수치": 1,
-    "원인": 2,
-    "리스크": 3,
-    "리스크완화": 4,
-    "성장근거": 5,
-    "전망": 6,
-}
 
 
 SYSTEM_PROMPT = """너는 금융 뉴스 analyzer다.
 
 목표:
-기사 원문에서 중심 이슈를 식별하고, 다음 단계 콘텐츠 생성에 넘길 구조화된 분석 JSON을 만든다.
+대표 기사 본문과 앞단에서 전달된 cluster payload 문맥을 함께 읽고,
+핵심 이슈와 요약 포인트를 구조화한 분석 결과 JSON을 만든다.
 
 중요:
-- 기사 1건당 분석한다.
-- 입력 메타데이터는 힌트로만 사용한다.
-- point와 issue는 원문 근거 문장이 있어야 한다.
-- summary는 summary_points를 바탕으로만 작성한다.
-- summary에 point에 없는 새 사실을 추가하지 마라.
-- 수치가 중요하면 point와 summary 모두에 보존하라.
+- representative 기사 1건을 중심으로 분석한다.
+- 입력 메타데이터와 기업/섹터/시장 데이터는 힌트이자 비교 기준으로만 사용한다.
+- 핵심 이슈와 요약 포인트는 반드시 기사 원문 근거가 있어야 한다.
+- summary는 짧은 제목이 아니라, 이 뉴스를 이해하는 데 필요한 사실/원인/시장 반응/해석/시사점을 담은 설명형 문단으로 작성한다.
+- summary_points와 evidence_sentences는 기사 원문에 있는 내용만 반영한다.
+- analysis_sections는 프론트 상세 페이지의 분석 블록이다. 3개 또는 4개로 작성하고, 번호를 붙이지 않는다.
+- analysis_sections의 각 section은 서로 역할이 달라야 하며, 같은 사실이나 같은 해석을 의미 없이 반복하지 않는다.
+- 중요한 사실이 여러 section에 필요하면 같은 말을 반복하지 말고, 각 section 역할에 맞게 의미를 달리해서 녹인다.
+- 직접적인 투자판단(매수/매도 권유, 목표가 제시)은 하지 않는다.
+- 기업/섹터/시장 데이터는 새 사실을 만들지 말고 기사 해석 보조용으로만 사용한다.
 - 출력은 반드시 JSON만 반환한다.
 """.strip()
 
 
-SUMMARY_SCHEMA = {
-    "type": "OBJECT",
-    "properties": {
-        "article_id": {"type": "STRING"},
-        "news_type": {"type": "STRING"},
-        "primary_issue_id": {"type": "STRING"},
-        "issue_candidates": {
-            "type": "ARRAY",
-            "items": {
-                "type": "OBJECT",
-                "properties": {
-                    "issue_id": {"type": "STRING"},
-                    "issue": {"type": "STRING"},
-                    "issue_layer": {
-                        "type": "STRING",
-                        "enum": ["주요 이슈", "직접 촉발 이슈", "시장 해석 이슈", "중장기 전망 이슈"],
-                    },
-                    "issue_type": {
-                        "type": "STRING",
-                        "enum": ["시장반응", "원인", "해석", "전망", "리스크", "성장논리", "핵심수치"],
-                    },
-                    "related_entities": {"type": "ARRAY", "items": {"type": "STRING"}},
-                    "supporting_sentences": {"type": "ARRAY", "items": {"type": "STRING"}},
-                    "centrality_score": {"type": "INTEGER"},
-                    "market_relevance_score": {"type": "INTEGER"},
-                    "support_strength_score": {"type": "INTEGER"},
-                    "forward_value_score": {"type": "INTEGER"},
-                    "entity_focus_score": {"type": "INTEGER"},
-                    "is_primary": {"type": "BOOLEAN"},
-                },
-                "required": [
-                    "issue_id",
-                    "issue",
-                    "issue_layer",
-                    "issue_type",
-                    "related_entities",
-                    "supporting_sentences",
-                    "centrality_score",
-                    "market_relevance_score",
-                    "support_strength_score",
-                    "forward_value_score",
-                    "entity_focus_score",
-                    "is_primary",
-                ],
-            },
-        },
-        "secondary_issue_ids": {"type": "ARRAY", "items": {"type": "STRING"}},
-        "summary_points": {
-            "type": "ARRAY",
-            "items": {
-                "type": "OBJECT",
-                "properties": {
-                    "point_id": {"type": "STRING"},
-                    "linked_issue_id": {"type": "STRING"},
-                    "point": {"type": "STRING"},
-                    "point_type": {
-                        "type": "STRING",
-                        "enum": ["시장반응", "원인", "리스크", "리스크완화", "성장근거", "전망", "핵심수치"],
-                    },
-                    "summary_role": {"type": "STRING"},
-                    "issue_layer": {
-                        "type": "STRING",
-                        "enum": ["주요 이슈", "직접 촉발 이슈", "시장 해석 이슈", "중장기 전망 이슈"],
-                    },
-                    "key_numbers": {
-                        "type": "ARRAY",
-                        "items": {
-                            "type": "OBJECT",
-                            "properties": {
-                                "label": {"type": "STRING"},
-                                "value": {"type": "STRING"},
-                                "entity": {"type": "STRING"},
-                                "time_context": {"type": "STRING"},
-                            },
-                            "required": ["label", "value"],
-                        },
-                    },
-                    "related_entity": {"type": "ARRAY", "items": {"type": "STRING"}},
-                    "evidence_sentence": {"type": "STRING"},
-                    "evidence_sentences": {"type": "ARRAY", "items": {"type": "STRING"}},
-                    "is_source_grounded": {"type": "BOOLEAN"},
-                },
-                "required": [
-                    "point_id",
-                    "point",
-                    "point_type",
-                    "summary_role",
-                    "related_entity",
-                    "evidence_sentence",
-                    "evidence_sentences",
-                    "is_source_grounded",
-                ],
-            },
-        },
-        "summary": {"type": "STRING"},
-        "coverage_check": {
-            "type": "OBJECT",
-            "properties": {
-                "primary_issue_checked": {"type": "BOOLEAN"},
-                "market_reaction_checked": {"type": "BOOLEAN"},
-                "cause_checked": {"type": "BOOLEAN"},
-                "risk_checked": {"type": "BOOLEAN"},
-                "market_interpretation_checked": {"type": "BOOLEAN"},
-                "growth_or_outlook_checked": {"type": "BOOLEAN"},
-                "outlook_checked": {"type": "BOOLEAN"},
-                "key_numbers_checked": {"type": "BOOLEAN"},
-            },
-            "required": [
-                "primary_issue_checked",
-                "market_reaction_checked",
-                "cause_checked",
-                "risk_checked",
-                "market_interpretation_checked",
-                "growth_or_outlook_checked",
-                "outlook_checked",
-                "key_numbers_checked",
-            ],
-        },
-    },
-    "required": [
-        "article_id",
-        "news_type",
-        "primary_issue_id",
-        "issue_candidates",
-        "secondary_issue_ids",
-        "summary_points",
-        "summary",
-        "coverage_check",
-    ],
-}
-
-
 class IssueBasedAnalyzerService:
-    """범용 기사 입력을 issue-centered analysis 결과로 변환하는 analyzer."""
+    """대표 기사 기반 LLM 분석과 sidebar 정형화를 함께 맡는 본체."""
 
     def analyze(self, article: AnalysisRequest) -> AnalysisResponse:
-        try:
-            return self._analyze_with_gemini(article)
-        except Exception as exc:
-            result = self._analyze_with_rules(article)
-            debug = dict(result.debug)
-            debug.update(
-                {
-                    "backend": "rules_fallback",
-                    "gemini_error": str(exc),
-                }
-            )
-            return result.model_copy(update={"debug": debug})
+        """LLM 1차 결과를 만들고, 프론트가 바로 쓰는 최종 응답으로 다시 묶는다."""
+        result = self._analyze_with_langchain(article)
+        return self._finalize_response(article, result)
 
-    def _analyze_with_gemini(self, article: AnalysisRequest) -> AnalysisResponse:
-        try:
-            from google import genai
-        except ImportError as exc:
-            raise RuntimeError("google-genai 패키지가 필요합니다.") from exc
+    def _analyze_with_langchain(self, article: AnalysisRequest) -> LLMAnalysisResponse:
+        """LangChain structured output으로 Gemini 1차 결과를 받는다."""
+        llm = self._build_langchain_model()
+        structured_llm = llm.with_structured_output(LLMAnalysisResponse)
+        result = structured_llm.invoke(self._build_prompt(article))
+        if not isinstance(result, LLMAnalysisResponse):
+            result = LLMAnalysisResponse.model_validate(result)
+        return result
 
-        if cofig.GEMINI_USE_VERTEX:
-            if not cofig.GOOGLE_CLOUD_PROJECT:
-                raise RuntimeError("GOOGLE_CLOUD_PROJECT 환경변수가 필요합니다.")
-            client = genai.Client(
-                vertexai=True,
-                project=cofig.GOOGLE_CLOUD_PROJECT,
-                location=cofig.GOOGLE_CLOUD_LOCATION,
-            )
-            model_name = cofig.VERTEX_MODEL
-            backend = "gemini-vertex"
-        else:
-            if not cofig.GEMINI_API_KEY:
-                raise RuntimeError("GEMINI_API_KEY 환경변수가 필요합니다.")
-            client = genai.Client(api_key=cofig.GEMINI_API_KEY)
-            model_name = cofig.GEMINI_MODEL
-            backend = "gemini-api"
+    def _build_langchain_model(self) -> object:
+        """standalone이 아니라 서버 실행 환경의 Gemini 설정을 그대로 사용한다."""
+        if not cofig.GEMINI_API_KEY:
+            raise RuntimeError("GEMINI_API_KEY 환경변수가 필요합니다.")
 
-        response = client.models.generate_content(
-            model=model_name,
-            contents=self._build_prompt(article),
-            config={
-                "response_mime_type": "application/json",
-                "response_schema": SUMMARY_SCHEMA,
-            },
+        return ChatGoogleGenerativeAI(
+            model=cofig.GEMINI_MODEL,
+            google_api_key=cofig.GEMINI_API_KEY,
+            temperature=0,
         )
-        payload = json.loads(response.text)
-        result = AnalysisResponse.model_validate(payload)
-        debug = dict(result.debug)
-        debug.update(
-            {
-                "analyzer": self.__class__.__name__,
-                "backend": backend,
-                "summary_hint_count": len(article.summary_hint),
-                "metadata_hint_count": len(article.metadata.company_names)
-                + len(article.metadata.sectors)
-                + len(article.metadata.keywords),
-            }
-        )
-        return result.model_copy(update={"debug": debug})
 
     def _build_prompt(self, article: AnalysisRequest) -> str:
+        """대표 기사 본문은 중심, context는 보조라는 원칙으로 최종 프롬프트를 만든다."""
         metadata_payload = {
+            "cluster_id": article.cluster_id,
+            "cluster_size": article.cluster_size,
             "summary_hint": article.summary_hint,
             "company_names": article.metadata.company_names,
             "sectors": article.metadata.sectors,
             "keywords": article.metadata.keywords,
+            "source_titles": article.source_titles,
+            "market_context": article.context.model_dump(),
         }
         return f"""{SYSTEM_PROMPT}
 
 출력 형식:
 {{
   "article_id": "{article.article_id}",
-  "news_type": "주가 급등락 뉴스 / 실적 뉴스 / 정책·규제 뉴스 / 섹터/테마 뉴스 등",
-  "issue_candidates": [
-    {{
-      "issue_id": "issue_001",
-      "issue": "기사에서 뽑아낸 이슈 후보 문장",
-      "issue_layer": "주요 이슈 / 직접 촉발 이슈 / 시장 해석 이슈 / 중장기 전망 이슈",
-      "issue_type": "시장반응 / 원인 / 해석 / 전망 / 리스크 / 성장논리 / 핵심수치",
-      "related_entities": ["기업명", "섹터명", "키워드"],
-      "supporting_sentences": ["원문 문장 1", "원문 문장 2"],
-      "centrality_score": 5,
-      "market_relevance_score": 5,
-      "support_strength_score": 5,
-      "forward_value_score": 5,
-      "entity_focus_score": 5,
-      "is_primary": true
-    }}
+  "summary": "이 뉴스를 이해하는 데 필요한 핵심 사실, 원인, 시장 반응, 해석, 시사점을 담은 설명형 문단",
+  "selected_issue_candidates": [
+    "핵심 이슈 후보 1",
+    "핵심 이슈 후보 2"
   ],
-  "primary_issue_id": "issue_001",
-  "secondary_issue_ids": ["issue_002", "issue_003"],
+  "issue_selection_reason": "왜 이 이슈를 핵심으로 봤는지",
   "summary_points": [
-    {{
-      "point_id": "point_001",
-      "linked_issue_id": "issue_001",
-      "point": "요약문에 들어갈 핵심 포인트",
-      "point_type": "시장반응 / 원인 / 리스크 / 리스크완화 / 성장근거 / 전망 / 핵심수치",
-      "summary_role": "핵심 현상 / 하락 원인 / 상승 논리 / 주의 요인 / 중장기 전망",
-      "issue_layer": "주요 이슈 / 직접 촉발 이슈 / 시장 해석 이슈 / 중장기 전망 이슈",
-      "key_numbers": [
-        {{
-          "label": "주가 상승률",
-          "value": "2.59%",
-          "entity": "삼성전자",
-          "time_context": "장중"
-        }}
-      ],
-      "related_entity": ["기업명", "섹터명", "키워드"],
-      "evidence_sentence": "기사 원문 근거 문장",
-      "evidence_sentences": ["기사 원문 근거 문장 1", "기사 원문 근거 문장 2"],
-      "is_source_grounded": true
-    }}
+    "핵심 요약 포인트 1",
+    "핵심 요약 포인트 2"
   ],
-  "summary": "summary_points를 바탕으로 재구성한 종합 요약문",
-  "coverage_check": {{
-    "primary_issue_checked": true,
-    "market_reaction_checked": true,
-    "cause_checked": true,
-    "risk_checked": true,
-    "market_interpretation_checked": true,
-    "growth_or_outlook_checked": true,
-    "outlook_checked": true,
-    "key_numbers_checked": true
-  }}
+  "evidence_sentences": [
+    "핵심 포인트를 뒷받침하는 기사 원문 문장 1",
+    "핵심 포인트를 뒷받침하는 기사 원문 문장 2"
+  ],
+  "analysis_sections": [
+    {
+      "title": "기사 유형에 맞는 분석 제목 1",
+      "summary": "2~4문장 이내의 짧은 분석 문단"
+    },
+    {
+      "title": "기사 유형에 맞는 분석 제목 2",
+      "summary": "2~4문장 이내의 짧은 분석 문단"
+    },
+    {
+      "title": "주의할 점 또는 체크포인트",
+      "summary": "중복 없이 다른 역할을 하는 분석 문단"
+    }
+  ],
+  "risk_factors": [
+    "기사에서 읽을 수 있는 위험 요인"
+  ],
+  "opportunity_factors": [
+    "기사에서 읽을 수 있는 기회 요인"
+  ]
 }}
 
-입력 메타데이터:
+입력 메타데이터와 cluster payload 문맥:
 {json.dumps(metadata_payload, ensure_ascii=False, indent=2)}
 
 기사 제목:
@@ -312,425 +131,730 @@ class IssueBasedAnalyzerService:
 {article.content}
 """
 
-    def _analyze_with_rules(self, article: AnalysisRequest) -> AnalysisResponse:
-        sentences = self._split_sentences(article.content)
-        news_type = self._classify_news_type(sentences)
-        issue_candidates = self._build_issue_candidates(article, sentences)
-        summary_points = self._build_summary_points(article, issue_candidates)
-        primary_issue_id = next((issue.issue_id for issue in issue_candidates if issue.is_primary), None)
-        secondary_issue_ids = [
-            issue.issue_id for issue in issue_candidates if primary_issue_id and issue.issue_id != primary_issue_id
-        ]
-        summary = self._compose_summary(summary_points)
-
+    def _finalize_response(self, article: AnalysisRequest, result: LLMAnalysisResponse) -> AnalysisResponse:
+        """LLM 1차 결과와 정형 sidebar를 묶어 최종 AnalysisResponse를 만든다."""
+        analysis_summary = self._build_analysis_summary(article, result)
+        sidebar_context = self._build_sidebar_context(article)
         return AnalysisResponse(
-            article_id=article.article_id,
-            news_type=news_type,
-            primary_issue_id=primary_issue_id,
-            summary=summary,
-            issue_candidates=issue_candidates,
-            secondary_issue_ids=secondary_issue_ids,
-            summary_points=summary_points,
-            coverage_check=CoverageCheck(
-                primary_issue_checked=primary_issue_id is not None,
-                market_reaction_checked=any(p.point_type in {"시장반응", "핵심수치"} for p in summary_points),
-                cause_checked=any(p.point_type == "원인" for p in summary_points),
-                risk_checked=any(p.point_type in {"리스크", "리스크완화"} for p in summary_points),
-                market_interpretation_checked=any(p.issue_layer == "시장 해석 이슈" for p in summary_points),
-                growth_or_outlook_checked=any(p.point_type in {"성장근거", "전망"} for p in summary_points),
-                outlook_checked=any(p.point_type in {"성장근거", "전망"} for p in summary_points),
-                key_numbers_checked=any(p.key_numbers for p in summary_points),
-            ),
-            debug={
-                "analyzer": self.__class__.__name__,
-                "backend": "rules",
-                "summary_hint_count": len(article.summary_hint),
-                "metadata_hint_count": len(article.metadata.company_names)
-                + len(article.metadata.sectors)
-                + len(article.metadata.keywords),
-            },
+            cluster_id=article.cluster_id,
+            analysis_summary=analysis_summary,
+            market_context=article.context,
+            sidebar_context=sidebar_context,
         )
 
-    def _classify_news_type(self, sentences: list[str]) -> str:
-        text = " ".join(sentences)
-        if self._contains(text, ["상승", "하락", "반등", "급등", "급락", "약세", "강세"]):
-            return "주가 급등락 뉴스"
-        if self._contains(text, ["영업이익", "매출", "순이익", "실적"]):
-            return "실적 뉴스"
-        if self._contains(text, ["계약", "수주", "공급", "발주"]):
-            return "수주·계약 뉴스"
-        if self._contains(text, ["관세", "규제", "보조금", "정책", "법안"]):
-            return "정책·규제 뉴스"
-        if self._contains(text, ["금리", "환율", "유가", "원자재"]):
-            return "금리·환율·유가·원자재 뉴스"
-        if self._contains(text, ["인수", "합병", "지분", "매각"]):
-            return "M&A·지분투자 뉴스"
-        if self._contains(text, ["섹터", "밸류체인", "테마", "생태계"]):
-            return "섹터/테마 뉴스"
-        return "기타 경제 뉴스"
+    def build_sidebar_context(self, article: AnalysisRequest) -> SidebarContext:
+        """메인 분석과 별개로 sidebar만 다시 조회할 때 쓰는 진입점이다."""
+        return self._build_sidebar_context(article)
 
-    def _build_issue_candidates(
-        self,
-        article: AnalysisRequest,
-        sentences: list[str],
-    ) -> list[IssueCandidateRecord]:
-        market_sentences = [
-            sentence for sentence in sentences if self._contains(sentence, ["상승세", "하락", "반등", "약세", "강세"])
-        ]
-        cause_sentences = [
-            sentence for sentence in sentences if self._contains(sentence, ["WSJ", "목표치", "우려", "비용", "배경"])
-        ]
-        interpretation_sentences = [
-            sentence for sentence in sentences if self._contains(sentence, ["연구원", "설명했다", "일시적 조정", "광풍"])
-        ]
-        outlook_sentences = [
-            sentence for sentence in sentences if self._contains(sentence, ["KB증권", "재평가", "추론", "에이전트", "LPDDR5X", "CPU"])
-        ]
-
-        issues: list[IssueCandidateRecord] = []
-        if market_sentences:
-            issues.append(
-                IssueCandidateRecord(
-                    issue_id="issue_001",
-                    issue=self._build_primary_issue(article, market_sentences),
-                    issue_layer="주요 이슈",
-                    issue_type="시장반응",
-                    related_entities=self._extract_related_entities(article, " ".join(market_sentences)),
-                    supporting_sentences=market_sentences[:4],
-                    centrality_score=5,
-                    market_relevance_score=5,
-                    support_strength_score=5,
-                    forward_value_score=5,
-                    entity_focus_score=5,
-                    is_primary=True,
-                )
-            )
-        if cause_sentences:
-            issues.append(
-                IssueCandidateRecord(
-                    issue_id="issue_002",
-                    issue=self._build_cause_issue(article),
-                    issue_layer="직접 촉발 이슈",
-                    issue_type="원인",
-                    related_entities=self._extract_related_entities(article, " ".join(cause_sentences)),
-                    supporting_sentences=cause_sentences[:4],
-                    centrality_score=4,
-                    market_relevance_score=5,
-                    support_strength_score=5,
-                    forward_value_score=4,
-                    entity_focus_score=4,
-                )
-            )
-        if interpretation_sentences:
-            issues.append(
-                IssueCandidateRecord(
-                    issue_id="issue_003",
-                    issue=self._build_interpretation_issue(article),
-                    issue_layer="시장 해석 이슈",
-                    issue_type="해석",
-                    related_entities=self._extract_related_entities(article, " ".join(interpretation_sentences)),
-                    supporting_sentences=interpretation_sentences[:4],
-                    centrality_score=4,
-                    market_relevance_score=4,
-                    support_strength_score=5,
-                    forward_value_score=5,
-                    entity_focus_score=3,
-                )
-            )
-        if outlook_sentences:
-            issues.append(
-                IssueCandidateRecord(
-                    issue_id="issue_004",
-                    issue=self._build_outlook_issue(article),
-                    issue_layer="중장기 전망 이슈",
-                    issue_type="전망",
-                    related_entities=self._extract_related_entities(article, " ".join(outlook_sentences)),
-                    supporting_sentences=outlook_sentences[:4],
-                    centrality_score=3,
-                    market_relevance_score=4,
-                    support_strength_score=4,
-                    forward_value_score=5,
-                    entity_focus_score=4,
-                )
-            )
-        if issues:
-            return issues
-
-        fallback = sentences[0]
-        return [
-            IssueCandidateRecord(
-                issue_id="issue_001",
-                issue=fallback,
-                issue_layer="주요 이슈",
-                issue_type="시장반응" if self._contains(fallback, ["상승", "하락", "반등"]) else "전망",
-                related_entities=self._extract_related_entities(article, fallback),
-                supporting_sentences=[fallback],
-                is_primary=True,
-            )
-        ]
-
-    def _build_summary_points(
-        self,
-        article: AnalysisRequest,
-        issues: list[IssueCandidateRecord],
-    ) -> list[AnalysisPointRecord]:
-        issue_map = {issue.issue_id: issue for issue in issues}
-        points: list[AnalysisPointRecord] = []
-
-        primary = issue_map.get("issue_001")
-        if primary:
-            points.append(
-                AnalysisPointRecord(
-                    point_id="point_001",
-                    linked_issue_id="issue_001",
-                    point=primary.issue,
-                    point_type="시장반응",
-                    summary_role="핵심 현상",
-                    issue_layer="주요 이슈",
-                    key_numbers=self._extract_market_drop_numbers(article.content),
-                    related_entity=primary.related_entities,
-                    evidence_sentence=primary.supporting_sentences[0],
-                    evidence_sentences=primary.supporting_sentences,
-                    is_source_grounded=True,
-                )
-            )
-            number_point = self._build_number_point(article)
-            if number_point:
-                points.append(number_point)
-
-        cause = issue_map.get("issue_002")
-        if cause:
-            points.append(
-                AnalysisPointRecord(
-                    point_id="point_003",
-                    linked_issue_id="issue_002",
-                    point=cause.issue,
-                    point_type="원인",
-                    summary_role="하락 원인",
-                    issue_layer="직접 촉발 이슈",
-                    related_entity=cause.related_entities,
-                    evidence_sentence=cause.supporting_sentences[0],
-                    evidence_sentences=cause.supporting_sentences,
-                    is_source_grounded=True,
-                )
-            )
-
-        interpretation = issue_map.get("issue_003")
-        if interpretation:
-            support = interpretation.supporting_sentences
-            points.append(
-                AnalysisPointRecord(
-                    point_id="point_004",
-                    linked_issue_id="issue_003",
-                    point="허재환 유진투자증권 연구원은 이를 AI 산업 전체의 문제보다 오픈AI 개별 이슈로 봤다."
-                    if self._contains(article.content, ["AI 생태계의 성장을 의심할 정도는 아니다"])
-                    else interpretation.issue,
-                    point_type="리스크완화",
-                    summary_role="우려 완화 근거",
-                    issue_layer="시장 해석 이슈",
-                    related_entity=interpretation.related_entities,
-                    evidence_sentence=support[0],
-                    evidence_sentences=support[:2],
-                    is_source_grounded=True,
-                )
-            )
-            if self._contains(article.content, ["40% 급등", "광풍", "올버즈"]):
-                points.append(
-                    AnalysisPointRecord(
-                        point_id="point_005",
-                        linked_issue_id="issue_003",
-                        point="그는 뉴욕 증시 약세를 4월 미국 반도체주 40% 급등과 올버즈의 AI 진출 선언까지 나올 정도의 광풍 징후 뒤에 나온 일시적 조정으로 해석했다.",
-                        point_type="리스크완화",
-                        summary_role="시장 해석",
-                        issue_layer="시장 해석 이슈",
-                        key_numbers=[
-                            KeyNumberRecord(
-                                label="미국 반도체주 급등",
-                                value="40%",
-                                entity="미국 반도체주",
-                                time_context="4월",
-                            )
-                        ],
-                        related_entity=interpretation.related_entities,
-                        evidence_sentence=support[min(1, len(support) - 1)],
-                        evidence_sentences=support,
-                        is_source_grounded=True,
-                    )
-                )
-
-        outlook = issue_map.get("issue_004")
-        if outlook:
-            points.append(
-                AnalysisPointRecord(
-                    point_id="point_006",
-                    linked_issue_id="issue_004",
-                    point="KB증권도 AI 추론·에이전트 확산으로 CPU, 서버 D램, LPDDR5X, 낸드플래시 등 메모리 전반의 중요성이 커질 것으로 보며 삼성전자 가치 재평가 가능성을 제시했다."
-                    if self._contains(article.content, ["CPU", "서버 D램", "LPDDR5X", "낸드플래시"])
-                    else outlook.issue,
-                    point_type="전망",
-                    summary_role="중장기 전망",
-                    issue_layer="중장기 전망 이슈",
-                    related_entity=outlook.related_entities,
-                    evidence_sentence=outlook.supporting_sentences[0],
-                    evidence_sentences=outlook.supporting_sentences,
-                    is_source_grounded=True,
-                )
-            )
-
-        return sorted(points, key=lambda point: POINT_PRIORITY[point.point_type])
-
-    def _compose_summary(self, summary_points: list[AnalysisPointRecord]) -> str:
-        point_map = {point.point_id: point for point in summary_points}
-        ordered = [point_map.get(point_id) for point_id in ["point_001", "point_002", "point_003", "point_004", "point_005", "point_006"]]
-        primary, numbers, cause, relief, interpretation, outlook = ordered
-        if all([primary, numbers, cause, relief, interpretation, outlook]):
-            return " ".join(
-                [
-                    "오픈AI 실적 우려로 AI 반도체 투자심리가 흔들리며 "
-                    "삼성전자와 SK하이닉스는 프리마켓(-2%대)과 장 초반(-1%대) 약세를 보였지만, "
-                    "시장이 이를 AI 산업 전체의 문제보다 오픈AI 개별 이슈로 해석하면서 장중 반등했다.",
-                    self._ensure_period(numbers.point),
-                    "WSJ의 오픈AI 신규 사용자수·매출 목표 미달 보도와 막대한 AI 투자 비용 부담, "
-                    "사라 프라이어 오픈AI CFO의 데이터센터 비용 지급 우려 발언이 약세 배경으로 제시됐지만, "
-                    "허재환 유진투자증권 연구원은 이를 AI 생태계 성장 자체를 흔들 이슈로 보지 않았고 "
-                    "4월 미국 반도체주 40% 급등 뒤 나타난 일시적 조정으로 해석했다.",
-                    "KB증권도 AI 추론·에이전트 확산으로 CPU, 서버 D램, LPDDR5X, 낸드플래시 등 "
-                    "메모리 전반의 중요성이 커질 것으로 보며 삼성전자 가치 재평가 가능성을 제시했다.",
-                ]
-            )
-
-        return " ".join(self._ensure_period(point.point) for point in summary_points if point.point)
-
-    def _build_primary_issue(self, article: AnalysisRequest, market_sentences: list[str]) -> str:
-        date = self._extract_date(article.content)
-        companies = self._join_companies(article.metadata.company_names[:2])
-        premarket = self._extract_market_drop(article.content, "프리마켓")
-        early = self._extract_market_drop(article.content, "장 초반")
-        if date and companies and premarket and early:
-            return f"{date} {companies}는 오픈AI 우려에도 프리마켓({premarket})과 장 초반({early}) 약세를 딛고 장중 반등했다."
-        return market_sentences[0]
-
-    def _build_cause_issue(self, article: AnalysisRequest) -> str:
-        parts: list[str] = []
-        if self._contains(article.content, ["실적이 목표치보다 미치지 못할 것이란 전망"]):
-            parts.append("오픈AI의 실적이 목표치보다 미치지 못할 것이란 전망")
-        if self._contains(article.content, ["신규 사용자수와 매출 목표치를 달성하지 못했고", "막대한 AI 투자 비용"]):
-            parts.append("WSJ의 신규 사용자수·매출 목표 미달, 막대한 AI 투자 비용 부담 우려")
-        if self._contains(article.content, ["사라 프라이어", "AI 데이터센터 비용"]):
-            parts.append("사라 프라이어 오픈AI CFO의 AI 데이터센터 비용 지급 우려 발언")
-        if parts:
-            return f"{', '.join(parts)}이 뉴욕 증시 반도체 종목 약세의 배경으로 제시됐다."
-        return article.content[:120].strip() + "..."
-
-    def _build_interpretation_issue(self, article: AnalysisRequest) -> str:
-        if self._contains(article.content, ["AI 생태계의 성장을 의심할 정도는 아니다"]):
-            return "허재환 유진투자증권 연구원은 오픈AI 이슈를 AI 산업 전체의 문제가 아니라 오픈AI 개별 이슈이자 일시적 조정으로 해석했다."
-        return "시장 해석 이슈"
-
-    def _build_outlook_issue(self, article: AnalysisRequest) -> str:
-        if self._contains(article.content, ["AI 추론", "AI 에이전트", "LPDDR5X"]):
-            return "AI 추론·에이전트 확산으로 HBM 외 메모리 전반 수요 기대가 유지되며 삼성전자 가치 재평가 논리가 이어진다."
-        return "중장기 전망 이슈"
-
-    def _build_number_point(self, article: AnalysisRequest) -> AnalysisPointRecord | None:
-        price_sentence = self._find_sentence(article.content, ["주가는 전 거래일 대비 각각"])
-        sk_square_sentence = self._find_sentence(article.content, ["SK스퀘어도 상승 전환"])
-        pair_match = re.search(r"주가는 전 거래일 대비 각각\s*([\d.]+)%,\s*([\d.]+)%\s*오르고 있다", article.content)
-        sk_square_match = re.search(r"전날 대비\s*([0-9만천백\s]+원)\(([\d.]+)%\)\s*상승 중이다", article.content)
-        if not pair_match and not sk_square_match:
-            return None
-
-        point_parts: list[str] = []
-        key_numbers: list[KeyNumberRecord] = []
-        if pair_match:
-            point_parts.append(f"삼성전자는 {pair_match.group(1)}%")
-            point_parts.append(f"SK하이닉스는 {pair_match.group(2)}%")
-            key_numbers.extend(
-                [
-                    KeyNumberRecord(label="삼성전자 상승률", value=f"{pair_match.group(1)}%", entity="삼성전자", time_context="장중"),
-                    KeyNumberRecord(label="SK하이닉스 상승률", value=f"{pair_match.group(2)}%", entity="SK하이닉스", time_context="장중"),
-                ]
-            )
-        if sk_square_match:
-            point_parts.append(f"SK스퀘어는 {sk_square_match.group(2)}%({sk_square_match.group(1).strip()})")
-            key_numbers.append(
-                KeyNumberRecord(
-                    label="SK스퀘어 상승률",
-                    value=f"{sk_square_match.group(2)}%({sk_square_match.group(1).strip()})",
-                    entity="SK스퀘어",
-                    time_context="장중",
-                )
-            )
-        if not point_parts:
-            return None
-        return AnalysisPointRecord(
-            point_id="point_002",
-            linked_issue_id="issue_001",
-            point="현재 " + ", ".join(point_parts) + " 상승 중이다.",
-            point_type="핵심수치",
-            summary_role="시장 반응 수치",
-            issue_layer="주요 이슈",
-            key_numbers=key_numbers,
-            related_entity=self._extract_related_entities(article, " ".join(point_parts)),
-            evidence_sentence=price_sentence or article.content[:80],
-            evidence_sentences=[sentence for sentence in [price_sentence, sk_square_sentence] if sentence],
-            is_source_grounded=True,
+    def _build_analysis_summary(self, article: AnalysisRequest, result: LLMAnalysisResponse) -> AnalysisSummary:
+        """중복을 정리하고 프론트 메인 분석 블록 모양으로 다시 묶는다."""
+        return AnalysisSummary(
+            summary=result.summary,
+            selected_issue_candidates=self._dedupe_strings(result.selected_issue_candidates),
+            issue_selection_reason=result.issue_selection_reason,
+            summary_points=self._dedupe_strings(result.summary_points),
+            evidence_sentences=self._dedupe_strings(result.evidence_sentences),
+            analysis_sections=self._normalize_analysis_sections(result),
+            risk_factors=self._dedupe_strings(result.risk_factors),
+            opportunity_factors=self._dedupe_strings(result.opportunity_factors),
         )
 
-    def _extract_market_drop_numbers(self, content: str) -> list[KeyNumberRecord]:
-        values: list[KeyNumberRecord] = []
-        premarket = self._extract_market_drop(content, "프리마켓")
-        early = self._extract_market_drop(content, "장 초반")
-        if premarket:
-            values.append(KeyNumberRecord(label="프리마켓 약세", value=premarket, time_context="프리마켓"))
-        if early:
-            values.append(KeyNumberRecord(label="장 초반 약세", value=early, time_context="장 초반"))
-        return values
+    def _normalize_analysis_sections(
+        self,
+        result: LLMAnalysisResponse,
+    ) -> list[AnalysisSection]:
+        """section 수와 중복을 정리해 프론트가 바로 쓸 수 있게 맞춘다."""
+        sections: list[AnalysisSection] = []
+        seen_titles: set[str] = set()
+        seen_summaries: set[str] = set()
 
-    def _extract_market_drop(self, content: str, marker: str) -> str | None:
-        sentence = self._find_sentence(content, [marker])
-        if not sentence:
+        for section in result.analysis_sections:
+            title = str(section.title).strip()
+            summary = str(section.summary).strip()
+            if not title or not summary:
+                continue
+            if title in seen_titles or summary in seen_summaries:
+                continue
+            seen_titles.add(title)
+            seen_summaries.add(summary)
+            sections.append(AnalysisSection(title=title, summary=summary))
+
+        return sections[:4]
+
+    def _build_sidebar_context(
+        self,
+        article: AnalysisRequest,
+    ) -> SidebarContext:
+        """회사/시장/핵심 숫자를 우측 sidebar 카드 구조로 조립한다."""
+        related_companies = [
+            RelatedCompanyCard(
+                name=company.name,
+                ticker=company.ticker,
+                sector=company.sector,
+                current_price=company.metrics.get("current_price") or company.metrics.get("price") or company.metrics.get("close_price"),
+                price_change_pct=company.metrics.get("price_change_pct"),
+            )
+            for company in article.context.companies
+            if company.name
+            and (
+                company.ticker
+                or company.sector
+                or company.metrics.get("current_price")
+                or company.metrics.get("price")
+                or company.metrics.get("close_price")
+                or company.metrics.get("price_change_pct")
+            )
+        ]
+        related_markets = [
+            RelatedMarketCard(
+                name=indicator.name,
+                value=indicator.value,
+                change_pct=indicator.change,
+            )
+            for indicator in article.context.market_indicators
+        ]
+        return SidebarContext(
+            related_companies=related_companies,
+            related_markets=related_markets,
+            key_metrics=self._build_sidebar_key_metrics(article),
+        )
+
+    def _build_sidebar_key_metrics(self, article: AnalysisRequest) -> list[KeyMetric]:
+        """기사 본문 숫자를 우선으로 고르고, 필요할 때만 비교 문구를 붙인다."""
+        primary_market = self._select_primary_market(article)
+        issue_type = self._classify_issue_type(article)
+        metrics = self._extract_article_key_metrics(
+            article,
+            issue_type=issue_type,
+            primary_market=primary_market,
+        )
+
+        deduped: list[KeyMetric] = []
+        seen: set[tuple[str, str]] = set()
+        for metric in metrics:
+            key = (metric.label.strip(), metric.value.strip())
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(metric)
+
+        return deduped[:3]
+
+    def _classify_issue_type(self, article: AnalysisRequest) -> str:
+        haystack = " ".join(
+            [
+                article.title or "",
+                article.content,
+                *article.metadata.keywords,
+                *article.metadata.sectors,
+            ]
+        )
+        has_company = bool(article.context.companies or article.metadata.company_names)
+        market_tokens = [
+            "코스피",
+            "코스닥",
+            "지수",
+            "급락",
+            "급등",
+            "외국인",
+            "순매도",
+            "변동성",
+            "환율",
+            "대차",
+            "수급",
+        ]
+        earnings_tokens = [
+            "실적",
+            "매출",
+            "영업이익",
+            "순이익",
+            "컨센서스",
+            "가이던스",
+            "어닝",
+        ]
+        supply_tokens = [
+            "지분",
+            "주요주주",
+            "공급",
+            "수주",
+            "공정",
+            "증설",
+            "capex",
+            "설비투자",
+            "계약",
+            "채택",
+        ]
+        policy_tokens = [
+            "정책",
+            "규제",
+            "정부",
+            "금리",
+            "관세",
+            "지원",
+            "법안",
+            "재정",
+            "환율",
+        ]
+
+        lowered = haystack.lower()
+
+        if not has_company and article.context.market_indicators:
+            return "market"
+        if any(token in lowered for token in supply_tokens):
+            return "supply"
+        corporate_tokens = [
+            "매각",
+            "인수",
+            "m&a",
+            "최대주주",
+            "몸값",
+            "재시동",
+        ]
+        if has_company and any(token in lowered for token in corporate_tokens):
+            return "general"
+        if has_company and any(token in haystack for token in earnings_tokens):
+            return "earnings"
+        if any(token in haystack for token in policy_tokens):
+            return "policy"
+        if any(token in haystack for token in market_tokens):
+            return "market"
+        return "general"
+
+    def _extract_article_key_metrics(
+        self,
+        article: AnalysisRequest,
+        issue_type: str,
+        primary_market: RelatedMarketCard | None,
+    ) -> list[KeyMetric]:
+        candidates_by_group: dict[str, list[KeyMetric]] = {
+            "range_pct": [],
+            "single_pct": [],
+            "count_change": [],
+            "financial_amount": [],
+            "flow_amount": [],
+            "price_reaction": [],
+            "market_value": [],
+        }
+
+        sentences = self._split_sentences(article.content)
+        companies = article.context.companies
+
+        for sentence in sentences:
+            for metric in self._extract_percent_range_metrics(sentence):
+                candidates_by_group["range_pct"].append(metric)
+            for metric in self._extract_single_percent_metrics(sentence):
+                candidates_by_group["single_pct"].append(metric)
+            for metric in self._extract_count_change_metrics(sentence):
+                candidates_by_group["count_change"].append(metric)
+            for metric in self._extract_financial_amount_metrics(sentence, article):
+                candidates_by_group["financial_amount"].append(metric)
+            for metric in self._extract_flow_amount_metrics(sentence):
+                candidates_by_group["flow_amount"].append(metric)
+            for metric in self._extract_company_reaction_metrics(sentence, companies, primary_market):
+                candidates_by_group["price_reaction"].append(metric)
+            for metric in self._extract_market_sentence_metrics(sentence, primary_market):
+                candidates_by_group["market_value"].append(metric)
+
+        group_order = {
+            "market": ["flow_amount", "price_reaction", "market_value", "range_pct", "single_pct", "count_change", "financial_amount"],
+            "earnings": ["financial_amount", "price_reaction", "range_pct", "single_pct", "count_change", "market_value", "flow_amount"],
+            "supply": ["range_pct", "count_change", "single_pct", "financial_amount", "price_reaction", "market_value", "flow_amount"],
+            "policy": ["flow_amount", "market_value", "price_reaction", "range_pct", "single_pct", "financial_amount", "count_change"],
+            "general": ["range_pct", "single_pct", "count_change", "financial_amount", "price_reaction", "market_value", "flow_amount"],
+        }
+
+        ordered: list[KeyMetric] = []
+        for group in group_order.get(issue_type, group_order["general"]):
+            ordered.extend(candidates_by_group[group])
+
+        deduped: list[KeyMetric] = []
+        seen: set[tuple[str, str]] = set()
+        seen_labels: set[str] = set()
+        for metric in ordered:
+            key = (metric.label.strip(), metric.value.strip())
+            label_key = metric.label.strip()
+            if key in seen or label_key in seen_labels:
+                continue
+            seen.add(key)
+            seen_labels.add(label_key)
+            deduped.append(metric)
+
+        return deduped[:3]
+
+    def _select_primary_market(self, article: AnalysisRequest) -> RelatedMarketCard | None:
+        if not article.context.market_indicators:
             return None
-        match = re.search(r"(\d+(?:\.\d+)?)%", sentence)
-        if not match:
+
+        for indicator in article.context.market_indicators:
+            if indicator.name.upper() == "KOSPI":
+                return RelatedMarketCard(
+                    name=indicator.name,
+                    value=indicator.value,
+                    change_pct=indicator.change,
+                )
+
+        indicator = article.context.market_indicators[0]
+        return RelatedMarketCard(
+            name=indicator.name,
+            value=indicator.value,
+            change_pct=indicator.change,
+        )
+
+    def _select_financial_anchor_company(self, article: AnalysisRequest):
+        for company in article.context.companies:
+            if any(company.metrics.get(key) for key in ("revenue", "operating_income", "net_income")):
+                return company
+        return None
+
+    def _build_market_value_metric(self, market: RelatedMarketCard | None) -> KeyMetric | None:
+        if not market or not market.name:
             return None
-        return f"-{match.group(1)}%대" if "가까이" in sentence else f"-{match.group(1)}%"
 
-    def _extract_date(self, content: str) -> str | None:
-        match = re.search(r"(\d+일)", content)
-        return match.group(1) if match else None
-
-    def _join_companies(self, companies: list[str]) -> str:
-        filtered = [item for item in companies if item]
-        if len(filtered) >= 2:
-            return f"{filtered[0]}와 {filtered[1]}"
-        if filtered:
-            return filtered[0]
-        return ""
-
-    def _extract_related_entities(self, article: AnalysisRequest, sentence: str) -> list[str]:
-        candidates = article.metadata.company_names + article.metadata.sectors + article.metadata.keywords
-        related = [candidate for candidate in candidates if candidate and candidate in sentence]
-        for token in re.findall(r"\b[A-Z][A-Z0-9\-]{1,}\b", sentence):
-            if token not in related:
-                related.append(token)
-        return related
-
-    def _find_sentence(self, content: str, keywords: list[str]) -> str | None:
-        for sentence in self._split_sentences(content):
-            if self._contains(sentence, keywords):
-                return sentence
+        if market.value and market.change_pct:
+            return KeyMetric(
+                label=f"{market.name} 지수",
+                value=market.value,
+                emphasis=f"일간 등락률 {market.change_pct}",
+            )
+        if market.change_pct:
+            return KeyMetric(
+                label=f"{market.name} 등락률",
+                value=market.change_pct,
+                emphasis=None,
+            )
+        if market.value:
+            return KeyMetric(
+                label=f"{market.name} 지수",
+                value=market.value,
+                emphasis=None,
+            )
         return None
 
     def _split_sentences(self, content: str) -> list[str]:
-        normalized = re.sub(r"\n+", " ", content.strip())
-        return [segment.strip() for segment in re.split(r"(?<=[.!?])\s+", normalized) if segment.strip()]
+        collapsed = re.sub(r"\s+", " ", content or "").strip()
+        if not collapsed:
+            return []
+        parts = re.split(r"(?<=[.!?다])\s+", collapsed)
+        return [part.strip() for part in parts if part.strip()]
 
-    def _contains(self, sentence: str, keywords: list[str]) -> bool:
-        return any(keyword in sentence for keyword in keywords)
+    def _extract_percent_range_metrics(self, sentence: str) -> list[KeyMetric]:
+        metrics: list[KeyMetric] = []
+        for match in re.finditer(r"(\d+(?:\.\d+)?)%\s*(?:에서|→|->|~)\s*(\d+(?:\.\d+)?)%", sentence):
+            start = float(match.group(1))
+            end = float(match.group(2))
+            label = "지분 확대 속도" if any(token in sentence for token in ["지분", "주주"]) else "비율 변화"
+            value = f"{match.group(1)}% → {match.group(2)}%"
+            emphasis = f"{end - start:+.2f}%p 변화"
+            metrics.append(KeyMetric(label=label, value=value, emphasis=emphasis))
+        return metrics
 
-    def _ensure_period(self, sentence: str) -> str:
-        cleaned = sentence.strip()
-        if cleaned and not cleaned.endswith("."):
-            cleaned += "."
-        return cleaned
+    def _extract_count_change_metrics(self, sentence: str) -> list[KeyMetric]:
+        metrics: list[KeyMetric] = []
+        for match in re.finditer(r"(\d[\d,]*)\s*개\s*(?:에서|→|->|~)\s*(\d[\d,]*)\s*개", sentence):
+            start = int(match.group(1).replace(",", ""))
+            end = int(match.group(2).replace(",", ""))
+            if any(token in sentence for token in ["공정", "적용"]):
+                label = "적용 공정 수"
+            elif any(token in sentence for token in ["공급", "채택"]):
+                label = "공급 범위 변화"
+            else:
+                label = "수량 변화"
+            value = f"{match.group(1)}개 → {match.group(2)}개"
+            if start > 0:
+                emphasis = f"약 {end / start:.1f}배 확대" if end >= start else f"약 {start / max(end, 1):.1f}배 축소"
+            else:
+                emphasis = f"{end - start:+,}개 변화"
+            metrics.append(KeyMetric(label=label, value=value, emphasis=emphasis))
+        return metrics
+
+    def _extract_single_percent_metrics(self, sentence: str) -> list[KeyMetric]:
+        metrics: list[KeyMetric] = []
+        if re.search(r"\d+(?:\.\d+)?%\s*(?:에서|→|->|~)\s*\d+(?:\.\d+)?%", sentence):
+            return metrics
+        pct_match = re.search(r"(\d+(?:\.\d+)?)%", sentence)
+        if not pct_match:
+            return metrics
+
+        pct_value = f"{pct_match.group(1)}%"
+        lowered = sentence.lower()
+
+        if "지분" in sentence or "주주" in sentence:
+            label = "보유 지분"
+            metrics.append(
+                KeyMetric(
+                    label=label,
+                    value=pct_value,
+                    emphasis=None,
+                )
+            )
+            return metrics
+
+        if "roe" in lowered:
+            metrics.append(KeyMetric(label="ROE", value=pct_value, emphasis=None))
+
+        return metrics
+
+    def _extract_financial_amount_metrics(self, sentence: str, article: AnalysisRequest) -> list[KeyMetric]:
+        metric_specs = [
+            ("매출", "매출", "revenue"),
+            ("영업이익", "영업이익", "operating_income"),
+            ("순이익", "순이익", "net_income"),
+            ("영업손실", "영업손실", "operating_income"),
+            ("거래대금", "거래대금", None),
+            ("거래량", "거래량", None),
+            ("판매량", "판매량", None),
+            ("목표주가", "목표주가", None),
+            ("몸값", "예상 몸값", None),
+            ("CSM", "CSM", None),
+        ]
+        metrics: list[KeyMetric] = []
+
+        for token, label, financial_key in metric_specs:
+            if token not in sentence:
+                continue
+            amount_text = self._extract_amount_near_token(sentence, token)
+            if not amount_text:
+                continue
+
+            display_label = self._build_amount_label(label, sentence)
+            emphasis = self._extract_growth_hint(sentence)
+
+            if not emphasis and financial_key:
+                anchor = self._select_financial_anchor_company(article)
+                if anchor:
+                    emphasis = self._build_financial_comparison_emphasis(
+                        article_text_value=amount_text,
+                        sentence=sentence,
+                        financial_key=financial_key,
+                        metrics=anchor.metrics,
+                    )
+
+            metrics.append(KeyMetric(label=display_label, value=amount_text, emphasis=emphasis))
+
+        return metrics
+
+    def _extract_flow_amount_metrics(self, sentence: str) -> list[KeyMetric]:
+        metrics: list[KeyMetric] = []
+        for actor in ("외국인", "기관", "개인"):
+            for flow in ("순매수", "순매도"):
+                token = f"{actor} {flow}"
+                if token not in sentence:
+                    continue
+                amount_text = self._extract_amount_near_token(sentence, flow)
+                if not amount_text:
+                    continue
+                metrics.append(KeyMetric(label=token, value=amount_text, emphasis=self._extract_growth_hint(sentence)))
+        return metrics
+
+    def _extract_company_reaction_metrics(
+        self,
+        sentence: str,
+        companies: list,
+        primary_market: RelatedMarketCard | None,
+    ) -> list[KeyMetric]:
+        if not any(token in sentence for token in ["상승", "하락", "올랐", "내렸", "반등", "강세", "약세", "급등", "급락"]):
+            return []
+
+        companies_in_sentence = [
+            company.name
+            for company in companies
+            if company.name
+            and company.name in sentence
+            and (company.ticker or company.metrics.get("current_price") or company.metrics.get("price_change_pct"))
+        ]
+        if not companies_in_sentence:
+            return []
+
+        pct_matches = [match.group(0) for match in re.finditer(r"\d+(?:\.\d+)?%", sentence)]
+        if not pct_matches:
+            return []
+
+        metrics: list[KeyMetric] = []
+        for company_name, pct_text in zip(companies_in_sentence, pct_matches):
+            normalized_pct = self._normalize_article_pct(pct_text, sentence)
+            emphasis = self._build_article_price_emphasis(normalized_pct, primary_market)
+            metrics.append(
+                KeyMetric(
+                    label=f"{company_name} 주가 반응",
+                    value=normalized_pct,
+                    emphasis=emphasis,
+                )
+            )
+        return metrics
+
+    def _extract_market_sentence_metrics(
+        self,
+        sentence: str,
+        primary_market: RelatedMarketCard | None,
+    ) -> list[KeyMetric]:
+        if not primary_market:
+            return []
+        if primary_market.name not in sentence and "지수" not in sentence and "코스피" not in sentence and "코스닥" not in sentence:
+            return []
+        return [self._build_market_value_metric(primary_market)] if self._build_market_value_metric(primary_market) else []
+
+    def _extract_amount_near_token(self, sentence: str, token: str) -> str | None:
+        value_pattern = r"[+-]?[0-9천백십만억조.,]+(?:조\s*[0-9천백십만억조.,]+억\s*원|조\s*원|억원|억\s*원|원|만\s*장|장)(?:\s*(?:∼|~|\-|→|->)\s*[0-9천백십만억조.,]+(?:조\s*[0-9천백십만억조.,]+억\s*원|조\s*원|억원|억\s*원|원|만\s*장|장))?"
+        patterns = [
+            rf"{re.escape(token)}[은는이가\s:]*({value_pattern})",
+            rf"({value_pattern})[^\n]{{0,6}}{re.escape(token)}",
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, sentence)
+            if match:
+                return re.sub(r"\s+", " ", match.group(1)).strip()
+        return None
+
+    def _build_amount_label(self, label: str, sentence: str) -> str:
+        quarter_match = re.search(r"(\d)분기", sentence)
+        prefix = ""
+        suffix = ""
+
+        if label == "판매량":
+            subject = self._extract_subject_for_metric(sentence)
+            if subject:
+                label = f"{subject} 판매량"
+
+        if quarter_match and "판매량" not in label:
+            prefix = f"{quarter_match.group(1)}분기 "
+        elif "연간" in sentence or "올해" in sentence:
+            prefix = "연간 "
+
+        if any(token in sentence for token in ["예상", "전망", "예측", "가이던스"]):
+            suffix = " 전망"
+        if "누적" in sentence:
+            prefix = f"{prefix}누적 "
+        return f"{prefix}{label}{suffix}".strip()
+
+    def _extract_growth_hint(self, sentence: str) -> str | None:
+        patterns = [
+            r"(전년\s*동기\s*대비\s*[+-]?\d+(?:\.\d+)?%)",
+            r"(전년\s*대비\s*[+-]?\d+(?:\.\d+)?%)",
+            r"(직전\s*분기\s*대비\s*[+-]?\d+(?:\.\d+)?%)",
+            r"(전분기\s*대비\s*[+-]?\d+(?:\.\d+)?%)",
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, sentence)
+            if match:
+                return match.group(1).replace("  ", " ")
+        return None
+
+    def _build_financial_comparison_emphasis(
+        self,
+        article_text_value: str,
+        sentence: str,
+        financial_key: str,
+        metrics: dict[str, str],
+    ) -> str | None:
+        financial_year = metrics.get("financial_year")
+        anchor_value = metrics.get(financial_key)
+        if not financial_year or not anchor_value:
+            return None
+
+        if any(sep in article_text_value for sep in ("∼", "~", "-")):
+            return f"{financial_year}년 연간 {self._financial_label(financial_key)} {anchor_value} 기준 가이던스"
+
+        article_amount = self._parse_korean_amount(article_text_value)
+        anchor_amount = self._parse_korean_amount(anchor_value)
+        if article_amount is None or anchor_amount in (None, 0):
+            return f"{financial_year}년 연간 {self._financial_label(financial_key)} {anchor_value} 기준"
+
+        if anchor_amount < 0 < article_amount:
+            return f"{financial_year}년 연간 {self._financial_label(financial_key)} {anchor_value} 적자 구간에서 흑자 전환 기대"
+        if article_amount < 0 < anchor_amount:
+            return f"{financial_year}년 연간 {self._financial_label(financial_key)} {anchor_value} 흑자 구간 대비 적자 전환 우려"
+        if anchor_amount < 0 and article_amount < 0:
+            if abs(article_amount) < abs(anchor_amount):
+                return f"{financial_year}년 연간 {self._financial_label(financial_key)} {anchor_value} 대비 적자폭 축소"
+            if abs(article_amount) > abs(anchor_amount):
+                return f"{financial_year}년 연간 {self._financial_label(financial_key)} {anchor_value} 대비 적자폭 확대"
+            return f"{financial_year}년 연간 {self._financial_label(financial_key)} {anchor_value}와 유사한 적자 수준"
+
+        if "분기" in sentence:
+            share = (article_amount / anchor_amount) * 100
+            return f"{financial_year}년 연간 {self._financial_label(financial_key)}의 {share:.1f}% 수준"
+
+        diff_pct = ((article_amount - anchor_amount) / abs(anchor_amount)) * 100
+        direction = "상회" if diff_pct > 0 else "하회" if diff_pct < 0 else "동일"
+        if abs(diff_pct) < 0.1:
+            return f"{financial_year}년 연간 {self._financial_label(financial_key)}와 유사"
+        return f"{financial_year}년 연간 {self._financial_label(financial_key)} 대비 {diff_pct:+.1f}% {direction}"
+
+    def _normalize_article_pct(self, pct_text: str, sentence: str) -> str:
+        pct_text = pct_text.strip()
+        if pct_text.startswith(("+", "-")):
+            return pct_text
+        if any(token in sentence for token in ["상승", "올랐", "반등", "강세", "급등"]):
+            return f"+{pct_text}"
+        if any(token in sentence for token in ["하락", "내렸", "약세", "급락"]):
+            return f"-{pct_text}"
+        return pct_text
+
+    def _build_article_price_emphasis(
+        self,
+        article_change_pct: str,
+        market: RelatedMarketCard | None,
+    ) -> str | None:
+        if not market or not market.change_pct:
+            return "기사 기준 주가 반응"
+        article_change = self._parse_pct(article_change_pct)
+        market_change = self._parse_pct(market.change_pct)
+        if article_change is None or market_change is None:
+            return f"{market.name}({market.change_pct}) 비교 기준"
+        diff = article_change - market_change
+        direction = "강세" if diff > 0 else "약세" if diff < 0 else "동일"
+        if direction == "동일":
+            return f"{market.name}({market.change_pct})와 유사한 흐름"
+        return f"{market.name}({market.change_pct}) 대비 {self._format_diff_pct(diff)} {direction}"
+
+    def _parse_korean_amount(self, value: str | None) -> int | None:
+        if not value:
+            return None
+        text = str(value).replace(" ", "").replace(",", "")
+        sign = -1 if text.startswith("-") else 1
+        text = text.lstrip("+-")
+
+        total = 0
+        jo_match = re.search(r"(\d+(?:\.\d+)?)조", text)
+        uk_match = re.search(r"(\d+(?:\.\d+)?)억", text)
+        won_match = re.search(r"(\d+(?:\.\d+)?)원", text)
+        man_jang_match = re.search(r"(\d+(?:\.\d+)?)만장", text)
+        jang_match = re.search(r"(\d+(?:\.\d+)?)장", text)
+
+        if jo_match or uk_match:
+            if jo_match:
+                total += int(float(jo_match.group(1)) * 1000000000000)
+            if uk_match:
+                total += int(float(uk_match.group(1)) * 100000000)
+            return sign * total
+        if man_jang_match:
+            return sign * int(float(man_jang_match.group(1)) * 10000)
+        if jang_match:
+            return sign * int(float(jang_match.group(1)))
+        if won_match:
+            return sign * int(float(won_match.group(1)))
+        return None
+
+    def _extract_subject_for_metric(self, sentence: str) -> str | None:
+        quoted = re.search(r"'([^']+)'[^.\n]{0,12}판매량", sentence)
+        if quoted:
+            return quoted.group(1).strip()
+        plain = re.search(r"([A-Za-z0-9가-힣]+)[^.\n]{0,8}판매량", sentence)
+        if plain:
+            subject = plain.group(1).strip()
+            if subject not in {"판매량", "누적", "초기", "기록"}:
+                return subject
+        return None
+
+    def _extract_share_subject(self, sentence: str) -> str | None:
+        patterns = [
+            r"([A-Za-z0-9가-힣]+)[^.\n]{0,8}지분",
+            r"([A-Za-z0-9가-힣]+)[^.\n]{0,8}주주",
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, sentence)
+            if match:
+                subject = match.group(1).strip()
+                subject = re.sub(r"(이|가|은|는|을|를)$", "", subject)
+                if subject not in {"지분", "주주", "보유", "확대"}:
+                    return subject
+        return None
+
+    def _financial_label(self, financial_key: str) -> str:
+        return {
+            "revenue": "매출",
+            "operating_income": "영업이익",
+            "net_income": "순이익",
+        }.get(financial_key, financial_key)
+
+    def _extract_key_numbers(self, article: AnalysisRequest) -> list[str]:
+        numbers: list[str] = []
+        for company in article.context.companies:
+            company_metric_text = self._format_company_key_metric(company.name, company.metrics)
+            if company_metric_text:
+                numbers.append(company_metric_text)
+        for indicator in article.context.market_indicators:
+            market_text = self._format_market_indicator(indicator.name, indicator.value, indicator.change)
+            if market_text:
+                numbers.append(market_text)
+        return self._dedupe_strings(numbers)
+
+    def _extract_market_status(self, article: AnalysisRequest) -> list[str]:
+        statuses: list[str] = []
+        for indicator in article.context.market_indicators:
+            market_text = self._format_market_indicator(indicator.name, indicator.value, indicator.change)
+            if market_text:
+                statuses.append(market_text)
+        return self._dedupe_strings(statuses)
+
+    def _format_metrics(self, metrics: dict[str, str]) -> str | None:
+        if not metrics:
+            return None
+        parts = [f"{key}={value}" for key, value in metrics.items() if str(value).strip()]
+        return ", ".join(parts) if parts else None
+
+    def _format_market_indicator(self, name: str, value: str | None, change: str | None) -> str | None:
+        parts = [name]
+        if value:
+            parts.append(str(value))
+        if change:
+            parts.append(str(change))
+        joined = " / ".join(part for part in parts if part)
+        return joined or None
+
+    def _format_company_key_metric(self, name: str, metrics: dict[str, str]) -> str | None:
+        if not metrics:
+            return None
+
+        current_price = (
+            metrics.get("current_price")
+            or metrics.get("price")
+            or metrics.get("close_price")
+        )
+        change_rate = metrics.get("price_change_pct")
+        change_value = metrics.get("price_change")
+
+        parts = [name]
+        if current_price:
+            parts.append(str(current_price))
+        if change_rate:
+            parts.append(str(change_rate))
+        elif change_value:
+            parts.append(str(change_value))
+
+        if len(parts) > 1:
+            return " / ".join(parts)
+
+        fallback = self._format_metrics(metrics)
+        if fallback:
+            return f"{name}: {fallback}"
+        return None
+
+    def _parse_pct(self, value: str | None) -> float | None:
+        if not value:
+            return None
+
+        cleaned = str(value).strip().replace("%", "").replace(",", "")
+        match = re.search(r"[-+]?\d+(?:\.\d+)?", cleaned)
+        if not match:
+            return None
+
+        try:
+            return float(match.group(0))
+        except ValueError:
+            return None
+
+    def _format_diff_pct(self, diff: float) -> str:
+        sign = "+" if diff > 0 else ""
+        return f"{sign}{diff:.2f}%p"
+
+    def _dedupe_strings(self, values: list[str]) -> list[str]:
+        deduped: list[str] = []
+        seen: set[str] = set()
+        for value in values:
+            key = str(value).strip()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            deduped.append(key)
+        return deduped

@@ -21,6 +21,7 @@ dependencies = [
   "langgraph",
   "langsmith",
   "langchain-google-genai",
+  "pykrx",
 ]
 
 [dependency-groups]
