@@ -12,14 +12,24 @@ from apps.src.models.DTO import (
     SidebarContext,
     StructuredContext,
 )
+from apps.src.services.analyzer.db_cluster_loader import load_cluster_payload_from_db
 from apps.src.services.analyzer.issue_based_analyzer import IssueBasedAnalyzerService
+from apps.src.services.analyzer.workflow import ClusterAnalysisWorkflow
 
 
+# 읽는 순서:
+# 1) analyze_clusters / analyze_cluster
+# 2) _select_representative_article
+# 3) _cluster_to_request
+# 4) _build_cluster_context
 class ClusterAnalyzerService:
+    """클러스터 payload를 analyzer 표준 입력으로 바꾸는 중간 계층."""
+
     def __init__(self) -> None:
         self._issue_based_analyzer = IssueBasedAnalyzerService()
 
     def analyze(self, article: AnalysisRequest) -> AnalysisResponse:
+        """정리된 request를 실제 analyzer로 넘긴다."""
         return self._issue_based_analyzer.analyze(article)
 
     def analyze_request(self, article: AnalysisRequest) -> AnalysisResponse:
@@ -41,29 +51,27 @@ class ClusterAnalyzerService:
         return self.analyze_clusters(payload)[0]
 
     def analyze_cluster_from_db(self, cluster_id: str) -> AnalysisResponse:
-        from apps.src.services.analyzer.db_cluster_loader import load_cluster_payload_from_db
-
+        """DB 클러스터 1개를 읽어 대표 기사 기준 분석 결과로 바꾼다."""
         payload = load_cluster_payload_from_db(cluster_id)
         return self.analyze_cluster(payload)
 
     def build_sidebar_context(self, payload: dict[str, Any] | AnalysisRequest) -> SidebarContext:
+        """같은 입력에서 sidebar용 정형 데이터만 별도로 만든다."""
         article = self.to_analysis_request(payload)
         return self._issue_based_analyzer.build_sidebar_context(article)
 
     def build_sidebar_context_from_db(self, cluster_id: str) -> SidebarContext:
-        from apps.src.services.analyzer.db_cluster_loader import load_cluster_payload_from_db
-
         payload = load_cluster_payload_from_db(cluster_id)
         return self.build_sidebar_context(payload)
 
     def analyze_clusters(self, payload: dict[str, Any] | list[dict[str, Any]]) -> list[AnalysisResponse]:
-        from apps.src.services.analyzer.workflow import ClusterAnalysisWorkflow
-
+        """클러스터 입력을 workflow 순서대로 돌려 분석 결과 리스트를 만든다."""
         workflow = ClusterAnalysisWorkflow(self)
         return workflow.run(payload)
 
 
     def to_analysis_requests(self, payload: dict[str, Any] | list[dict[str, Any]]) -> list[AnalysisRequest]:
+        """클러스터 입력을 AnalysisRequest 리스트로 정규화한다."""
         if isinstance(payload, list):
             return [self._cluster_to_request(item) for item in payload]
 
@@ -76,6 +84,7 @@ class ClusterAnalyzerService:
         return [self._cluster_to_request(payload)]
 
     def to_analysis_request(self, payload: dict[str, Any] | AnalysisRequest) -> AnalysisRequest:
+        """단일 클러스터 입력 1개를 AnalysisRequest로 맞춘다."""
         if isinstance(payload, AnalysisRequest):
             return payload
 
@@ -114,6 +123,7 @@ class ClusterAnalyzerService:
         cluster: dict[str, Any],
         representative: dict[str, Any] | None = None,
     ) -> AnalysisRequest:
+        """대표 기사 본문을 중심으로 LLM 입력 1개를 만든다."""
         representative = representative or self._select_representative_article(cluster)
         cluster_meta = cluster.get("cluster") if isinstance(cluster.get("cluster"), dict) else {}
         summary_hint = self._build_cluster_summary_hints(cluster, representative)
@@ -163,6 +173,7 @@ class ClusterAnalyzerService:
         )
 
     def _select_representative_article(self, cluster: dict[str, Any]) -> dict[str, Any]:
+        """클러스터 안 기사들 중 분석 기준이 될 대표 기사 1개를 고른다."""
         representative = cluster.get("representative_article")
         if isinstance(representative, dict) and representative:
             return representative
@@ -221,6 +232,7 @@ class ClusterAnalyzerService:
         return []
 
     def _build_cluster_context(self, cluster: dict[str, Any], representative: dict[str, Any]) -> StructuredContext:
+        """회사/섹터/시장 데이터를 StructuredContext로 묶는다."""
         companies = self._build_company_context(cluster)
         sectors = self._build_sector_context(cluster)
         market_indicators = self._build_market_indicators(cluster)

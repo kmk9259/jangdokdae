@@ -1,6 +1,4 @@
-"""사용자 관심 프로필 및 analyzer 라우터."""
-
-from typing import Any
+"""사용자 관심 프로필 API."""
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
@@ -9,13 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.src.config.database import get_db
 from apps.src.config.sectors import SECTORS
 from apps.src.dependencies.auth import get_current_user
-from apps.src.models.DTO import AnalysisResponse, SidebarContext
 from apps.src.models.user import User
 from apps.src.schemas.users import InterestProfileBody, InterestProfileResponse
-from apps.src.services.analyzer.analyzer_service import ClusterAnalyzerService
 
 router = APIRouter()
-analyzer_router = APIRouter()
 
 
 @router.get("/sectors")
@@ -51,43 +46,3 @@ async def update_profile(
         sectors=db_user.interest_sectors,
         companies=db_user.interest_companies,
     )
-
-
-@analyzer_router.get("/health")
-def analysis_health() -> dict[str, str]:
-    return {"status": "ok", "service": "analyzer"}
-
-
-@analyzer_router.get("/sidebar-context/{cluster_id}", response_model=SidebarContext)
-def get_sidebar_context(cluster_id: str) -> SidebarContext:
-    service = ClusterAnalyzerService()
-    return service.build_sidebar_context_from_db(cluster_id)
-
-
-# issue-docent 상세와 별도로, analyzer 본문/초기 sidebar를 cluster_id 기준으로 제공한다.
-@analyzer_router.get("/detail/{cluster_id}", response_model=AnalysisResponse)
-def get_analysis_detail(cluster_id: str) -> AnalysisResponse:
-    service = ClusterAnalyzerService()
-    return service.analyze_cluster_from_db(cluster_id)
-
-
-@analyzer_router.post("/analyze-cluster", response_model=AnalysisResponse)
-def analyze_cluster(request: dict[str, Any]) -> AnalysisResponse:
-    service = ClusterAnalyzerService()
-    return service.analyze_cluster(request)
-
-
-@analyzer_router.post("/analyze-clusters", response_model=list[AnalysisResponse])
-def analyze_clusters(request: dict[str, Any] | list[dict[str, Any]]) -> list[AnalysisResponse]:
-    service = ClusterAnalyzerService()
-    return service.analyze_clusters(request)
-
-
-@analyzer_router.post("/analyze", response_model=AnalysisResponse, include_in_schema=False)
-def analyze_legacy_cluster(request: dict[str, Any]) -> AnalysisResponse:
-    return analyze_cluster(request)
-
-
-@analyzer_router.post("/analyze-batch", response_model=list[AnalysisResponse], include_in_schema=False)
-def analyze_legacy_clusters(request: dict[str, Any] | list[dict[str, Any]]) -> list[AnalysisResponse]:
-    return analyze_clusters(request)

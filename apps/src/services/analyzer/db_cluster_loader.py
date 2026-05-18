@@ -11,6 +11,7 @@ from apps.src.config import cofig
 
 
 def _get_engine():
+    """analyzer가 직접 DB를 읽을 때 쓰는 최소 SQLAlchemy engine을 만든다."""
     if not cofig.DATABASE_URL:
         raise RuntimeError("DATABASE_URL 환경변수가 필요합니다.")
 
@@ -22,6 +23,7 @@ def _get_engine():
 
 
 def load_cluster_payload_from_db(cluster_id: str) -> dict:
+    """DB cluster/article/entity 데이터를 analyzer용 payload 1개로 조립한다."""
     with _get_engine().connect() as conn:
         # 프론트/상세에서 들어오는 식별자를 실제 cluster_id로 정규화한다.
         resolved_cluster_id = _resolve_cluster_id(conn, cluster_id)
@@ -118,6 +120,7 @@ def load_cluster_payload_from_db(cluster_id: str) -> dict:
 
 
 def _resolve_cluster_id(conn, lookup_id: str) -> str:
+    """들어온 식별자를 DB exact id 관계로 따라 실제 cluster_id로 정규화한다."""
     # 유사한 기사를 찾는 게 아니라, DB에 저장된 exact id 관계만 따라간다.
     normalized_lookup_id = str(lookup_id).strip()
     if not normalized_lookup_id:
@@ -173,6 +176,7 @@ def _resolve_cluster_id(conn, lookup_id: str) -> str:
 
 
 def _load_market_rows(conn, cluster_id: str) -> list[dict[str, Any]]:
+    """cluster에 연결된 market_indicators 행들을 읽는다."""
     try:
         rows = conn.execute(
             text(
@@ -190,6 +194,7 @@ def _load_market_rows(conn, cluster_id: str) -> list[dict[str, Any]]:
 
 
 def _load_company_master_map(company_names: list[str]) -> dict[str, dict[str, str]]:
+    """회사명 목록을 company_master 기본 정보와 연결한다."""
     company_map: dict[str, dict[str, str]] = {}
     if not company_names:
         return company_map
@@ -222,6 +227,7 @@ def _load_company_master_map(company_names: list[str]) -> dict[str, dict[str, st
 
 
 def _load_financial_snapshots(company_master_map: dict[str, dict[str, str]]) -> dict[str, dict[str, str]]:
+    """company_id 기준 최근 연간 재무 스냅샷을 가져온다."""
     company_ids = [item.get("company_id") for item in company_master_map.values() if item.get("company_id")]
     if not company_ids:
         return {}
@@ -293,6 +299,7 @@ def _build_company_payloads(
     stock_quotes: dict[str, dict[str, str]],
     financial_snapshots: dict[str, dict[str, str]],
 ) -> list[dict[str, Any]]:
+    """회사명 -> 기본 정보/시세/재무를 한 번에 묶어 company payload를 만든다."""
     payloads: list[dict[str, Any]] = []
 
     for name in company_names:
@@ -322,6 +329,7 @@ def _build_company_payloads(
 
 
 def _fetch_pykrx_stock_quotes(company_master_map: dict[str, dict[str, str]]) -> dict[str, dict[str, str]]:
+    """관련 기업 현재가/등락률을 pykrx 최근 거래일 기준으로 보강한다."""
     if not company_master_map:
         return {}
 
@@ -338,6 +346,7 @@ def _fetch_pykrx_stock_quotes(company_master_map: dict[str, dict[str, str]]) -> 
 
 
 def _fetch_pykrx_kospi_quote() -> dict[str, str] | None:
+    """KOSPI 현재 지수와 등락률을 sidebar 비교 기준으로 가져온다."""
     try:
         from pykrx import stock
     except ImportError:
@@ -377,6 +386,7 @@ def _fetch_pykrx_kospi_quote() -> dict[str, str] | None:
 
 
 def _build_market_context(market_rows: list[dict[str, Any]], kospi_quote: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """DB market_indicators가 있으면 우선 사용하고, 없으면 KOSPI 보강값으로 채운다."""
     db_items = []
     for row in market_rows:
         item = _build_market_payload(row)

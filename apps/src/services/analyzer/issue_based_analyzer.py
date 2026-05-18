@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import re
 
+from langchain_google_genai import ChatGoogleGenerativeAI
+
 from apps.src.config import cofig
 from apps.src.models.DTO import (
     AnalysisSection,
@@ -39,11 +41,15 @@ SYSTEM_PROMPT = """너는 금융 뉴스 analyzer다.
 
 
 class IssueBasedAnalyzerService:
+    """대표 기사 기반 LLM 분석과 sidebar 정형화를 함께 맡는 본체."""
+
     def analyze(self, article: AnalysisRequest) -> AnalysisResponse:
+        """LLM 1차 결과를 만들고, 프론트가 바로 쓰는 최종 응답으로 다시 묶는다."""
         result = self._analyze_with_langchain(article)
         return self._finalize_response(article, result)
 
     def _analyze_with_langchain(self, article: AnalysisRequest) -> LLMAnalysisResponse:
+        """LangChain structured output으로 Gemini 1차 결과를 받는다."""
         llm = self._build_langchain_model()
         structured_llm = llm.with_structured_output(LLMAnalysisResponse)
         result = structured_llm.invoke(self._build_prompt(article))
@@ -52,10 +58,9 @@ class IssueBasedAnalyzerService:
         return result
 
     def _build_langchain_model(self) -> object:
+        """standalone이 아니라 서버 실행 환경의 Gemini 설정을 그대로 사용한다."""
         if not cofig.GEMINI_API_KEY:
             raise RuntimeError("GEMINI_API_KEY 환경변수가 필요합니다.")
-
-        from langchain_google_genai import ChatGoogleGenerativeAI
 
         return ChatGoogleGenerativeAI(
             model=cofig.GEMINI_MODEL,
@@ -64,6 +69,7 @@ class IssueBasedAnalyzerService:
         )
 
     def _build_prompt(self, article: AnalysisRequest) -> str:
+        """대표 기사 본문은 중심, context는 보조라는 원칙으로 최종 프롬프트를 만든다."""
         metadata_payload = {
             "cluster_id": article.cluster_id,
             "cluster_size": article.cluster_size,
@@ -126,6 +132,7 @@ class IssueBasedAnalyzerService:
 """
 
     def _finalize_response(self, article: AnalysisRequest, result: LLMAnalysisResponse) -> AnalysisResponse:
+        """LLM 1차 결과와 정형 sidebar를 묶어 최종 AnalysisResponse를 만든다."""
         analysis_summary = self._build_analysis_summary(article, result)
         sidebar_context = self._build_sidebar_context(article)
         return AnalysisResponse(
@@ -136,9 +143,11 @@ class IssueBasedAnalyzerService:
         )
 
     def build_sidebar_context(self, article: AnalysisRequest) -> SidebarContext:
+        """메인 분석과 별개로 sidebar만 다시 조회할 때 쓰는 진입점이다."""
         return self._build_sidebar_context(article)
 
     def _build_analysis_summary(self, article: AnalysisRequest, result: LLMAnalysisResponse) -> AnalysisSummary:
+        """중복을 정리하고 프론트 메인 분석 블록 모양으로 다시 묶는다."""
         return AnalysisSummary(
             summary=result.summary,
             selected_issue_candidates=self._dedupe_strings(result.selected_issue_candidates),
@@ -154,6 +163,7 @@ class IssueBasedAnalyzerService:
         self,
         result: LLMAnalysisResponse,
     ) -> list[AnalysisSection]:
+        """section 수와 중복을 정리해 프론트가 바로 쓸 수 있게 맞춘다."""
         sections: list[AnalysisSection] = []
         seen_titles: set[str] = set()
         seen_summaries: set[str] = set()
@@ -175,6 +185,7 @@ class IssueBasedAnalyzerService:
         self,
         article: AnalysisRequest,
     ) -> SidebarContext:
+        """회사/시장/핵심 숫자를 우측 sidebar 카드 구조로 조립한다."""
         related_companies = [
             RelatedCompanyCard(
                 name=company.name,
@@ -209,6 +220,7 @@ class IssueBasedAnalyzerService:
         )
 
     def _build_sidebar_key_metrics(self, article: AnalysisRequest) -> list[KeyMetric]:
+        """기사 본문 숫자를 우선으로 고르고, 필요할 때만 비교 문구를 붙인다."""
         primary_market = self._select_primary_market(article)
         issue_type = self._classify_issue_type(article)
         metrics = self._extract_article_key_metrics(

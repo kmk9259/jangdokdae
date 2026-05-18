@@ -9,9 +9,10 @@ load_dotenv()
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from apps.src.api.analyzer import router as analyzer_router
 from apps.src.api.auth import router as auth_router
 from apps.src.api.issue_docent import router as issue_docent_router
-from apps.src.api.users import analyzer_router, router as user_router
+from apps.src.api.users import router as user_router
 
 
 def create_app() -> FastAPI:

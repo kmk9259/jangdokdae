@@ -24,7 +24,7 @@ Analyzer는 수집된 뉴스 클러스터를 바탕으로,
 서버 기준 주요 파일:
 
 ```text
-apps/src/api/users.py
+apps/src/api/analyzer.py
 apps/src/models/DTO.py
 apps/src/services/analyzer/analyzer_service.py
 apps/src/services/analyzer/db_cluster_loader.py
@@ -34,7 +34,7 @@ apps/src/services/analyzer/workflow.py
 
 역할 요약:
 
-- `api/users.py`
+- `api/analyzer.py`
   - analyzer API 엔드포인트 제공
 - `models/DTO.py`
   - analyzer 요청 / 응답 스키마 정의
