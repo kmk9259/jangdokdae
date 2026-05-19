@@ -14,6 +14,7 @@ class GenerationResult:
     issue_docent_id: int | None
     status: str
     title: str | None = None
+    payload: IssueDocentPersistPayload | None = None
 
 
 class IssueDocentGenerationService:
@@ -49,6 +50,7 @@ class IssueDocentGenerationService:
                 issue_docent_id=None,
                 status="dry_run",
                 title=payload.title,
+                payload=payload,
             )
 
         issue_docent_id = await self.repository.persist_issue_docent(
@@ -72,6 +74,7 @@ class IssueDocentGenerationService:
             issue_docent_id=issue_docent_id,
             status="persisted" if issue_docent_id is not None else "skipped_existing",
             title=payload.title,
+            payload=payload,
         )
 
     async def generate_batch(
