@@ -53,8 +53,8 @@ Reviewed clusters:
 - The latest dry-run emitted `auto_gates` PASS for all five criteria and no `auto_review_notes`.
 - Manual review of the same outputs found no remaining broad-market drift, investment-benefit wording, low-priority technical catalyst leakage, title numbers, teaser number overload, article-hype wording, or disallowed section use.
 
-## Verification Still Required Before Merge
+## Latest Verification
 
-- Run the full test suite.
-- Run `git diff --check`.
+- `uv run pytest`: 62 passed.
+- `git diff --check`: passed.
 - Keep the branch as branch-only work unless a PR is explicitly requested.
