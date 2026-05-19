@@ -43,7 +43,7 @@ from apps.src.config.paths import DATA_DIR as _DATA_DIR
 # 스텝별 필수 환경변수
 _REQUIRED_ENV: dict[str, list[str]] = {
     "embed":   ["EMBED_MODEL"],
-    "extract": ["LLM_MODEL", "GEMINI_API_KEY"],
+    "extract": ["LLM_MODEL", "GOOGLE_APPLICATION_CREDENTIALS"],
     "company": ["OPENDART_API_KEY"],
 }
 
