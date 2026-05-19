@@ -6,7 +6,7 @@ import time
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, field_validator
 
-from apps.src.config import google_vertex_conf
+from apps.src.config import getenv
 from apps.src.config.paths import PROMPTS_DIR
 from apps.src.config.sectors import SECTORS
 from apps.src.exceptions.extraction_exceptions import (
@@ -41,30 +41,18 @@ class EntityExtractor:
     """
 
     def __init__(self, delay_sec: float = 1.0) -> None:
-        if google_vertex_conf.GEMINI_USE_VERTEX:
-            if not google_vertex_conf.GOOGLE_CLOUD_PROJECT:
-                raise LLMEnvError(
-                    "GOOGLE_CLOUD_PROJECT environment variable is not set",
-                    var_name="GOOGLE_CLOUD_PROJECT",
-                )
-            from langchain_google_vertexai import ChatVertexAI
-            llm = ChatVertexAI(
-                model=google_vertex_conf.VERTEX_MODEL,
-                project=google_vertex_conf.GOOGLE_CLOUD_PROJECT,
-                location=google_vertex_conf.GOOGLE_CLOUD_LOCATION,
+        if not getenv.GOOGLE_CLOUD_PROJECT:
+            raise LLMEnvError(
+                "GOOGLE_CLOUD_PROJECT environment variable is not set",
+                var_name="GOOGLE_CLOUD_PROJECT",
             )
-        else:
-            if not google_vertex_conf.GEMINI_MODEL:
-                raise LLMEnvError("LLM_MODEL environment variable is not set", var_name="LLM_MODEL")
-            if not google_vertex_conf.GEMINI_API_KEY:
-                raise LLMEnvError(
-                    "GEMINI_API_KEY environment variable is not set", var_name="GEMINI_API_KEY"
-                )
-            from langchain_google_genai import ChatGoogleGenerativeAI
-            llm = ChatGoogleGenerativeAI(
-                model=google_vertex_conf.GEMINI_MODEL,
-                google_api_key=google_vertex_conf.GEMINI_API_KEY,
-            )
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        llm = ChatGoogleGenerativeAI(
+            model=getenv.VERTEX_MODEL,
+            vertexai=True,
+            project=getenv.GOOGLE_CLOUD_PROJECT,
+            location=getenv.GOOGLE_CLOUD_LOCATION,
+        )
         prompt = ChatPromptTemplate.from_template(_PROMPT_TEMPLATE)
         self._chain = prompt | llm.with_structured_output(Extraction)
         self._sectors_text = "\n".join(f"   - {s}" for s in SECTORS)

@@ -5,7 +5,7 @@ import re
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 
-from apps.src.config import cofig
+from apps.src.config import getenv
 from apps.src.models.analyzer_dto import (
     AnalysisSection,
     AnalysisRequest,
@@ -58,13 +58,15 @@ class IssueBasedAnalyzerService:
         return result
 
     def _build_langchain_model(self) -> object:
-        """standalone이 아니라 서버 실행 환경의 Gemini 설정을 그대로 사용한다."""
-        if not cofig.GEMINI_API_KEY:
-            raise RuntimeError("GEMINI_API_KEY 환경변수가 필요합니다.")
+        """Vertex AI 환경에서 analyzer LLM을 만든다."""
+        if not getenv.GOOGLE_CLOUD_PROJECT:
+            raise RuntimeError("GOOGLE_CLOUD_PROJECT 환경변수가 필요합니다.")
 
         return ChatGoogleGenerativeAI(
-            model=cofig.GEMINI_MODEL,
-            google_api_key=cofig.GEMINI_API_KEY,
+            model=getenv.VERTEX_MODEL,
+            vertexai=True,
+            project=getenv.GOOGLE_CLOUD_PROJECT,
+            location=getenv.GOOGLE_CLOUD_LOCATION,
             temperature=0,
         )
 
@@ -80,46 +82,47 @@ class IssueBasedAnalyzerService:
             "source_titles": article.source_titles,
             "market_context": article.context.model_dump(),
         }
+        example_output = {
+            "article_id": article.article_id,
+            "summary": "이 뉴스를 이해하는 데 필요한 핵심 사실, 원인, 시장 반응, 해석, 시사점을 담은 설명형 문단",
+            "selected_issue_candidates": [
+                "핵심 이슈 후보 1",
+                "핵심 이슈 후보 2",
+            ],
+            "issue_selection_reason": "왜 이 이슈를 핵심으로 봤는지",
+            "summary_points": [
+                "핵심 요약 포인트 1",
+                "핵심 요약 포인트 2",
+            ],
+            "evidence_sentences": [
+                "핵심 포인트를 뒷받침하는 기사 원문 문장 1",
+                "핵심 포인트를 뒷받침하는 기사 원문 문장 2",
+            ],
+            "analysis_sections": [
+                {
+                    "title": "기사 유형에 맞는 분석 제목 1",
+                    "summary": "2~4문장 이내의 짧은 분석 문단",
+                },
+                {
+                    "title": "기사 유형에 맞는 분석 제목 2",
+                    "summary": "2~4문장 이내의 짧은 분석 문단",
+                },
+                {
+                    "title": "주의할 점 또는 체크포인트",
+                    "summary": "중복 없이 다른 역할을 하는 분석 문단",
+                },
+            ],
+            "risk_factors": [
+                "기사에서 읽을 수 있는 위험 요인",
+            ],
+            "opportunity_factors": [
+                "기사에서 읽을 수 있는 기회 요인",
+            ],
+        }
         return f"""{SYSTEM_PROMPT}
 
 출력 형식:
-{{
-  "article_id": "{article.article_id}",
-  "summary": "이 뉴스를 이해하는 데 필요한 핵심 사실, 원인, 시장 반응, 해석, 시사점을 담은 설명형 문단",
-  "selected_issue_candidates": [
-    "핵심 이슈 후보 1",
-    "핵심 이슈 후보 2"
-  ],
-  "issue_selection_reason": "왜 이 이슈를 핵심으로 봤는지",
-  "summary_points": [
-    "핵심 요약 포인트 1",
-    "핵심 요약 포인트 2"
-  ],
-  "evidence_sentences": [
-    "핵심 포인트를 뒷받침하는 기사 원문 문장 1",
-    "핵심 포인트를 뒷받침하는 기사 원문 문장 2"
-  ],
-  "analysis_sections": [
-    {
-      "title": "기사 유형에 맞는 분석 제목 1",
-      "summary": "2~4문장 이내의 짧은 분석 문단"
-    },
-    {
-      "title": "기사 유형에 맞는 분석 제목 2",
-      "summary": "2~4문장 이내의 짧은 분석 문단"
-    },
-    {
-      "title": "주의할 점 또는 체크포인트",
-      "summary": "중복 없이 다른 역할을 하는 분석 문단"
-    }
-  ],
-  "risk_factors": [
-    "기사에서 읽을 수 있는 위험 요인"
-  ],
-  "opportunity_factors": [
-    "기사에서 읽을 수 있는 기회 요인"
-  ]
-}}
+{json.dumps(example_output, ensure_ascii=False, indent=2)}
 
 입력 메타데이터와 cluster payload 문맥:
 {json.dumps(metadata_payload, ensure_ascii=False, indent=2)}
