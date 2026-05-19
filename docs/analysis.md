@@ -181,6 +181,7 @@ AnalysisResponse 반환
 현재 원칙:
 
 - 분석 결과는 Neon DB `article_analysis` 테이블에 저장형으로 관리
+- analyzer LLM 호출은 Vertex AI 환경에서 Gemini 모델을 사용
 - Gemini 분석은 저장 단계에서만 수행
 - 메인 분석 본문은 저장된 결과를 조회해 반환
 - 사이드바 숫자 데이터는 조회 시점 기준으로 다시 계산해 반환
@@ -199,7 +200,7 @@ AnalysisResponse 반환
 - `detail/{cluster_id}`
   - 저장된 analyzer 결과만 조회해 반환
 - `persist/{cluster_id}`
-  - Gemini 분석을 수행하고 `article_analysis` 테이블에 저장
+  - Vertex AI 환경의 Gemini 분석을 수행하고 `article_analysis` 테이블에 저장
 
 ---
 
@@ -221,7 +222,7 @@ AnalysisResponse 반환
 - `analyze-clusters`
   - batch 분석
 - `persist/{cluster_id}`
-  - cluster_id 기준으로 Gemini 분석을 실행하고 결과를 DB에 저장
+  - cluster_id 기준으로 Vertex AI 환경의 Gemini 분석을 실행하고 결과를 DB에 저장
 - `detail/{cluster_id}`
   - 상세 페이지에서 저장된 메인 분석 섹션을 가져올 때 사용
 - `sidebar-context/{cluster_id}`
