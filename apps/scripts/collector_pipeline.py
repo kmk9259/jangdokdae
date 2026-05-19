@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import logging
 import os
+import shutil
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -182,48 +183,41 @@ def main() -> None:
     run_date = datetime.now().date()
 
     data: Any = None
-    failed_steps: list[str] = []
-    article_id_map: dict = {}
-    cluster_id_map: dict = {}
+    step_data: dict[str, Any] = {}
 
-    for name, step_fn, fatal in _PIPELINE:
-        result = _run_step(name, step_fn, run_dir, data, args, fatal=fatal)
-        if result.success:
-            data = result.data
-            _save_step_to_db(name, data, repo, run_date, article_id_map, cluster_id_map)
-        else:
-            failed_steps.append(name)
-
-    if failed_steps:
-        logger.warning("[pipeline] done with non-fatal failures steps=%s run_id=%s output=%s", failed_steps, run_id, run_dir)
-
-
-def _save_step_to_db(
-    name: str,
-    data: Any,
-    repo: PipelineStore,
-    run_date: Any,
-    article_id_map: dict,
-    cluster_id_map: dict,
-) -> None:
-    """각 단계 성공 후 DB 저장. 실패해도 파이프라인은 계속 진행."""
     try:
-        if name == "preprocess":
-            result = asyncio.run(repo.save_articles(data))
-            article_id_map.update(result)
+        for name, step_fn, fatal in _PIPELINE:
+            result = _run_step(name, step_fn, run_dir, data, args, fatal=fatal)
+            if not result.success:
+                logger.error("[pipeline] step=%s failed, rolling back run_dir=%s", name, run_dir)
+                _rollback_files(run_dir)
+                return
+            data = result.data
+            step_data[name] = data
+    except PipelineStepError:
+        _rollback_files(run_dir)
+        raise
 
-        elif name == "cluster":
-            result = asyncio.run(repo.save_clusters(data, run_date, article_id_map))
-            cluster_id_map.update(result)
-
-        elif name == "extract":
-            asyncio.run(repo.save_entity_extraction(data, cluster_id_map))
-
-        elif name == "preprocess_company":
-            asyncio.run(repo.save_company_data(data))
-
+    # 모든 단계 성공 → 단일 트랜잭션으로 DB 저장
+    try:
+        asyncio.run(repo.save_pipeline_run(
+            run_date=run_date,
+            articles=step_data.get("preprocess", []),
+            clusters=step_data.get("macro", []),
+        ))
     except Exception as exc:
-        logger.warning("[pipeline] db save failed step=%s error=%s", name, exc, exc_info=True)
+        logger.error("[pipeline] DB save failed, rolling back run_dir=%s error=%s", run_dir, exc, exc_info=True)
+        _rollback_files(run_dir)
+        raise
+
+    logger.info("[pipeline] done run_id=%s output=%s", run_id, run_dir)
+
+
+def _rollback_files(run_dir: Path) -> None:
+    """실패 시 run_dir과 하위 JSON 파일을 삭제합니다."""
+    if run_dir.exists():
+        shutil.rmtree(run_dir)
+        logger.info("[pipeline] rolled back run_dir=%s", run_dir)
 
 
 if __name__ == "__main__":
