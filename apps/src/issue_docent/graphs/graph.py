@@ -3,6 +3,7 @@ from langgraph.types import Send
 
 from apps.src.issue_docent.graphs.nodes import (
     make_article_brief_node,
+    make_content_plan_node,
     make_issue_docent_content_node,
     make_quiz_node,
     prepare_cluster,
@@ -21,13 +22,15 @@ def build_issue_docent_graph(llm_client: IssueDocentLLMClient | None = None):
     graph = StateGraph(IssueDocentState)
     graph.add_node("prepare_cluster", prepare_cluster)
     graph.add_node("article_brief", make_article_brief_node(llm_client))
+    graph.add_node("content_plan", make_content_plan_node(llm_client))
     graph.add_node("issue_docent_content", make_issue_docent_content_node(llm_client))
     graph.add_node("quiz", make_quiz_node(llm_client))
     graph.add_node("validate_before_persist", validate_before_persist)
 
     graph.add_edge(START, "prepare_cluster")
     graph.add_conditional_edges("prepare_cluster", route_article_briefs, ["article_brief"])
-    graph.add_edge("article_brief", "issue_docent_content")
+    graph.add_edge("article_brief", "content_plan")
+    graph.add_edge("content_plan", "issue_docent_content")
     graph.add_edge("issue_docent_content", "quiz")
     graph.add_edge("quiz", "validate_before_persist")
     graph.add_edge("validate_before_persist", END)

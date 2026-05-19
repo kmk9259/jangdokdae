@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from apps.src.repositories.issue_docent import ArticleForGeneration, ClusterGenerationContext
 from apps.src.schemas.issue_docent_llm import (
     ArticleBriefOutput,
+    IssueDocentContentPlanOutput,
     IssueDocentContentOutput,
     QuizOutput,
 )
@@ -25,6 +26,7 @@ class IssueDocentState(TypedDict, total=False):
     article: ArticleForGeneration
     stock_terms: list[StockTermForMatch]
     article_briefs: Annotated[list[ArticleBriefOutput], operator.add]
+    content_plan: IssueDocentContentPlanOutput
     issue_docent_content: IssueDocentContentOutput
     quiz_term_candidates: list[dict]
     quizzes: QuizOutput

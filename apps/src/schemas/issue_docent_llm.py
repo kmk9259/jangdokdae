@@ -8,6 +8,26 @@ class ArticleBriefOutput(BaseModel):
     article_id: str
     article_order: int = Field(ge=0)
     brief: str = Field(min_length=1)
+    core_event: str = Field(min_length=1)
+    key_numbers: list[str] = Field(default_factory=list)
+    stated_background: list[str] = Field(default_factory=list)
+    stated_market_reactions: list[str] = Field(default_factory=list)
+    stated_interpretations: list[str] = Field(default_factory=list)
+    low_priority_details: list[str] = Field(default_factory=list)
+
+
+class IssueDocentPlanParagraph(BaseModel):
+    section: Literal["fact", "background", "market_reaction"]
+    source_article_orders: list[int] = Field(min_length=1)
+    facts: list[str] = Field(min_length=1)
+
+
+class IssueDocentContentPlanOutput(BaseModel):
+    central_article_order: int = Field(ge=0)
+    central_issue: str = Field(min_length=1)
+    selected_article_orders: list[int] = Field(min_length=1)
+    omitted_article_orders: list[int] = Field(default_factory=list)
+    paragraphs: list[IssueDocentPlanParagraph] = Field(min_length=1, max_length=3)
 
 
 class IssueDocentContentOutput(BaseModel):

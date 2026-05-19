@@ -1,22 +1,85 @@
 import pytest
 from pydantic import ValidationError
 
-from apps.src.schemas.issue_docent_llm import ArticleBriefOutput, IssueDocentContentOutput, QuizOutput
+from apps.src.schemas.issue_docent_llm import (
+    ArticleBriefOutput,
+    IssueDocentContentOutput,
+    IssueDocentContentPlanOutput,
+    IssueDocentPlanParagraph,
+    QuizOutput,
+)
 
 
-def test_article_brief_output_keeps_only_identity_order_and_brief():
+def test_article_brief_output_keeps_structured_source_facts():
     output = ArticleBriefOutput.model_validate(
         {
             "article_pk": 1,
             "article_id": "a1",
             "article_order": 0,
-            "brief": "기사 핵심 내용",
+            "brief": "한빛자산운용 ETF 순자산이 연초보다 늘었다.",
+            "core_event": "한빛자산운용 ETF 순자산이 연초보다 늘었다.",
+            "key_numbers": ["순자산 33조 3149억 원", "연초 대비 58.81% 증가"],
+            "stated_background": ["반도체 ETF 상품 순자산이 함께 늘었다."],
+            "stated_market_reactions": ["시장 점유율은 7.11%까지 올랐다."],
+            "stated_interpretations": [],
+            "low_priority_details": ["중심 사건과 직접 관련 없는 별도 금융상품 내용"],
         }
     )
 
-    assert set(output.model_fields_set) == {"article_pk", "article_id", "article_order", "brief"}
-    assert "key_facts" not in ArticleBriefOutput.model_fields
-    assert "source_views" not in ArticleBriefOutput.model_fields
+    assert output.core_event == "한빛자산운용 ETF 순자산이 연초보다 늘었다."
+    assert output.key_numbers == ["순자산 33조 3149억 원", "연초 대비 58.81% 증가"]
+    assert output.stated_interpretations == []
+
+
+def test_issue_docent_content_plan_output_accepts_paragraph_plan():
+    output = IssueDocentContentPlanOutput.model_validate(
+        {
+            "central_article_order": 0,
+            "central_issue": "한빛자산운용 ETF 순자산 증가",
+            "selected_article_orders": [0, 1],
+            "omitted_article_orders": [2],
+            "paragraphs": [
+                {
+                    "section": "fact",
+                    "source_article_orders": [0],
+                    "facts": [
+                        "한빛자산운용 ETF 순자산 총액은 33조 3149억 원이다.",
+                        "연초보다 58.81% 늘었다.",
+                    ],
+                },
+                {
+                    "section": "market_reaction",
+                    "source_article_orders": [0, 1],
+                    "facts": [
+                        "시장 점유율은 7.11%까지 올랐다.",
+                        "삼성전자와 SK하이닉스 편입 ETF 거래대금 비중이 확인됐다.",
+                    ],
+                },
+            ],
+        }
+    )
+
+    assert output.central_article_order == 0
+    assert output.selected_article_orders == [0, 1]
+    assert [paragraph.section for paragraph in output.paragraphs] == ["fact", "market_reaction"]
+
+
+def test_issue_docent_content_plan_rejects_unknown_paragraph_section():
+    with pytest.raises(ValidationError):
+        IssueDocentContentPlanOutput.model_validate(
+            {
+                "central_article_order": 0,
+                "central_issue": "한빛자산운용 ETF 순자산 증가",
+                "selected_article_orders": [0],
+                "paragraphs": [
+                    {
+                        "section": "outlook",
+                        "source_article_orders": [0],
+                        "facts": ["전망은 계획에 포함하지 않는다."],
+                    }
+                ],
+            }
+        )
 
 
 def test_issue_docent_content_output_accepts_title_teaser_and_summary_only():

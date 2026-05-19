@@ -28,10 +28,26 @@ def make_issue_docent_content_node(llm_client: IssueDocentLLMClient):
         content = await llm_client.generate_issue_docent_content(
             cluster=state["cluster"],
             article_briefs=article_briefs,
+            content_plan=state["content_plan"],
         )
         return {"issue_docent_content": content}
 
     return issue_docent_content_node
+
+
+def make_content_plan_node(llm_client: IssueDocentLLMClient):
+    async def content_plan_node(state: IssueDocentState) -> dict:
+        article_briefs = sorted(
+            state["article_briefs"],
+            key=lambda brief: brief.article_order,
+        )
+        content_plan = await llm_client.generate_content_plan(
+            cluster=state["cluster"],
+            article_briefs=article_briefs,
+        )
+        return {"content_plan": content_plan}
+
+    return content_plan_node
 
 
 def make_quiz_node(llm_client: IssueDocentLLMClient):

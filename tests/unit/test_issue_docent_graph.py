@@ -6,7 +6,9 @@ from apps.src.issue_docent.graphs.graph import build_issue_docent_graph
 from apps.src.repositories.issue_docent import ArticleForGeneration, ClusterGenerationContext
 from apps.src.schemas.issue_docent_llm import (
     ArticleBriefOutput,
+    IssueDocentContentPlanOutput,
     IssueDocentContentOutput,
+    IssueDocentPlanParagraph,
     QuizOutput,
 )
 from apps.src.services.issue_docent.term_matcher import StockTermForMatch
@@ -24,6 +26,33 @@ class FakeLLMClient:
             article_id=article.article_id,
             article_order=article.article_order,
             brief=f"{article.title} 요약",
+            core_event=f"{article.title} 중심 사건",
+            key_numbers=[],
+            stated_background=[],
+            stated_market_reactions=[],
+            stated_interpretations=[],
+            low_priority_details=[],
+        )
+
+    async def generate_content_plan(
+        self,
+        *,
+        cluster: ClusterGenerationContext,
+        article_briefs: list[ArticleBriefOutput],
+    ) -> IssueDocentContentPlanOutput:
+        self.content_input_orders = [brief.article_order for brief in article_briefs]
+        return IssueDocentContentPlanOutput(
+            central_article_order=0,
+            central_issue="첫 기사 중심 이슈",
+            selected_article_orders=[0, 1],
+            omitted_article_orders=[],
+            paragraphs=[
+                IssueDocentPlanParagraph(
+                    section="fact",
+                    source_article_orders=[0],
+                    facts=["첫 기사 중심 사실"],
+                )
+            ],
         )
 
     async def generate_issue_docent_content(
@@ -31,8 +60,9 @@ class FakeLLMClient:
         *,
         cluster: ClusterGenerationContext,
         article_briefs: list[ArticleBriefOutput],
+        content_plan: IssueDocentContentPlanOutput,
     ) -> IssueDocentContentOutput:
-        self.content_input_orders = [brief.article_order for brief in article_briefs]
+        self.content_plan_issue = content_plan.central_issue
         return IssueDocentContentOutput(
             title="클러스터 제목",
             teaser="간결한 티저 문장이다. 정보가 명확하다.",
@@ -99,6 +129,7 @@ async def test_issue_docent_graph_fans_out_article_briefs_and_builds_payload():
     result = await graph.ainvoke({"cluster": _cluster_context()})
 
     assert fake_llm.content_input_orders == [0, 1]
+    assert fake_llm.content_plan_issue == "첫 기사 중심 이슈"
     assert fake_llm.quiz_summary == "핵심 사건이 있었다."
     assert result["persist_payload"].cluster_id == 10
     assert result["persist_payload"].title == "클러스터 제목"

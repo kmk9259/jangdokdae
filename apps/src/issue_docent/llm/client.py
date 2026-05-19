@@ -10,6 +10,7 @@ from apps.src.repositories.issue_docent import ArticleForGeneration, ClusterGene
 from apps.src.issue_docent.llm.prompt_loader import load_prompt
 from apps.src.schemas.issue_docent_llm import (
     ArticleBriefOutput,
+    IssueDocentContentPlanOutput,
     IssueDocentContentOutput,
     QuizOutput,
 )
@@ -55,35 +56,26 @@ class IssueDocentLLMClient:
         *,
         cluster: ClusterGenerationContext,
         article_briefs: list[ArticleBriefOutput],
+        content_plan: IssueDocentContentPlanOutput,
     ) -> IssueDocentContentOutput:
-        payload = {
-            "cluster": {
-                "cluster_id": cluster.cluster_id,
-                "run_date": cluster.run_date.isoformat(),
-                "cluster_seq": cluster.cluster_seq,
-                "size": cluster.size,
-                "is_singleton": cluster.is_singleton,
-                "company_names": cluster.company_names,
-                "sectors": cluster.sectors,
-                "keywords": cluster.keywords,
-            },
-            "article_titles": [
-                {
-                    "article_pk": article.article_pk,
-                    "article_id": article.article_id,
-                    "article_order": article.article_order,
-                    "title": article.title,
-                    "press": article.press,
-                    "published_date": article.published_date.isoformat(),
-                }
-                for article in cluster.articles
-            ],
-            "article_briefs": [brief.model_dump() for brief in article_briefs],
-        }
+        payload = _build_content_payload(cluster=cluster, article_briefs=article_briefs)
+        payload["content_plan"] = content_plan.model_dump()
         return await self._structured_invoke(
             schema=IssueDocentContentOutput,
             prompt_name="cluster_summary.md",
             payload=payload,
+        )
+
+    async def generate_content_plan(
+        self,
+        *,
+        cluster: ClusterGenerationContext,
+        article_briefs: list[ArticleBriefOutput],
+    ) -> IssueDocentContentPlanOutput:
+        return await self._structured_invoke(
+            schema=IssueDocentContentPlanOutput,
+            prompt_name="content_plan.md",
+            payload=_build_content_payload(cluster=cluster, article_briefs=article_briefs),
         )
 
     async def generate_quizzes(
@@ -125,6 +117,37 @@ class IssueDocentLLMClient:
             except Exception as exc:
                 last_error = exc
         raise last_error
+
+
+def _build_content_payload(
+    *,
+    cluster: ClusterGenerationContext,
+    article_briefs: list[ArticleBriefOutput],
+) -> dict[str, Any]:
+    return {
+            "cluster": {
+                "cluster_id": cluster.cluster_id,
+                "run_date": cluster.run_date.isoformat(),
+                "cluster_seq": cluster.cluster_seq,
+                "size": cluster.size,
+                "is_singleton": cluster.is_singleton,
+                "company_names": cluster.company_names,
+                "sectors": cluster.sectors,
+                "keywords": cluster.keywords,
+            },
+            "article_titles": [
+                {
+                    "article_pk": article.article_pk,
+                    "article_id": article.article_id,
+                    "article_order": article.article_order,
+                    "title": article.title,
+                    "press": article.press,
+                    "published_date": article.published_date.isoformat(),
+                }
+                for article in cluster.articles
+            ],
+            "article_briefs": [brief.model_dump() for brief in article_briefs],
+        }
 
 
 def _jsonable(value: Any) -> Any:

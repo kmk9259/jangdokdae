@@ -4,7 +4,8 @@ import pytest
 
 from apps.src.issue_docent.llm import client as client_module
 from apps.src.issue_docent.llm.client import IssueDocentLLMClient, create_main_llm
-from apps.src.repositories.issue_docent import ArticleForGeneration
+from apps.src.repositories.issue_docent import ArticleForGeneration, ClusterGenerationContext
+from apps.src.schemas.issue_docent_llm import ArticleBriefOutput, IssueDocentContentPlanOutput
 
 
 class FakeChatGoogleGenerativeAI:
@@ -30,6 +31,38 @@ class FlakyStructuredLLM:
             "article_id": "article-1",
             "article_order": 0,
             "brief": "기사 핵심 내용",
+            "core_event": "기사 중심 사건",
+            "key_numbers": [],
+            "stated_background": [],
+            "stated_market_reactions": [],
+            "stated_interpretations": [],
+            "low_priority_details": [],
+        }
+
+
+class CapturingStructuredLLM:
+    def __init__(self) -> None:
+        self.schema = None
+        self.messages = []
+
+    def with_structured_output(self, schema):
+        self.schema = schema
+        return self
+
+    async def ainvoke(self, messages):
+        self.messages = messages
+        return {
+            "central_article_order": 0,
+            "central_issue": "첫 기사 중심 이슈",
+            "selected_article_orders": [0],
+            "omitted_article_orders": [1],
+            "paragraphs": [
+                {
+                    "section": "fact",
+                    "source_article_orders": [0],
+                    "facts": ["첫 기사 중심 사실"],
+                }
+            ],
         }
 
 
@@ -54,6 +87,36 @@ async def test_structured_invoke_retries_empty_output_failure():
 
     assert llm.calls == 2
     assert result.brief == "기사 핵심 내용"
+    assert result.core_event == "기사 중심 사건"
+
+
+@pytest.mark.asyncio
+async def test_generate_content_plan_uses_structured_plan_schema_and_article_payload():
+    llm = CapturingStructuredLLM()
+    client = IssueDocentLLMClient(llm=llm, structured_output_max_attempts=1)
+
+    result = await client.generate_content_plan(
+        cluster=_cluster_context(),
+        article_briefs=[
+            ArticleBriefOutput(
+                article_pk=1,
+                article_id="article-1",
+                article_order=0,
+                brief="첫 기사 요약",
+                core_event="첫 기사 중심 사건",
+                key_numbers=["10억 원"],
+                stated_background=[],
+                stated_market_reactions=[],
+                stated_interpretations=[],
+                low_priority_details=[],
+            )
+        ],
+    )
+
+    assert llm.schema is IssueDocentContentPlanOutput
+    assert result.central_issue == "첫 기사 중심 이슈"
+    assert '"article_order": 0' in llm.messages[1].content
+    assert '"core_event": "첫 기사 중심 사건"' in llm.messages[1].content
 
 
 def test_create_main_llm_uses_vertex_with_main_model(monkeypatch):
@@ -83,3 +146,41 @@ def test_create_main_llm_requires_google_cloud_project(monkeypatch):
 
     with pytest.raises(RuntimeError, match="GOOGLE_CLOUD_PROJECT"):
         create_main_llm()
+
+
+def _cluster_context() -> ClusterGenerationContext:
+    return ClusterGenerationContext(
+        cluster_id=10,
+        run_date=datetime(2026, 5, 19).date(),
+        cluster_seq=1,
+        size=2,
+        is_singleton=False,
+        created_at=datetime(2026, 5, 19),
+        company_names=["삼성전자"],
+        sectors=["반도체"],
+        keywords=["투자"],
+        articles=[
+            ArticleForGeneration(
+                article_pk=1,
+                article_id="article-1",
+                article_order=0,
+                title="첫 기사",
+                url="https://example.com/1",
+                press="신문",
+                published_date=datetime(2026, 5, 19),
+                content="첫 기사 본문",
+                similarity_to_centroid=0.9,
+            ),
+            ArticleForGeneration(
+                article_pk=2,
+                article_id="article-2",
+                article_order=1,
+                title="둘째 기사",
+                url="https://example.com/2",
+                press="신문",
+                published_date=datetime(2026, 5, 19),
+                content="둘째 기사 본문",
+                similarity_to_centroid=0.8,
+            ),
+        ],
+    )
